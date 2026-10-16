@@ -6,7 +6,13 @@ llm:
   host: http://127.0.0.1:11434   # NÃO use "localhost": no Windows custa +2 s por pergunta (tenta IPv6 primeiro)
   keep_alive: -1          # mantém o modelo na GPU
   max_turnos: 10          # quantas trocas lembrar na conversa atual
-  temperatura: 0.6
+  contexto: 6144          # tokens. Só prompt + 20 ferramentas já usam ~2400; 8192 aperta a VRAM com o Whisper
+  temperatura: 0.3        # mais baixa = escolhe ferramentas com mais consistência (0.6 errava mais)
+
+memoria:
+  ativa: true
+  banco: data/memoria/jarvis.db
+  embeddings: embeddinggemma   # roda na CPU; em português acertou 15/15 (nomic-embed-text: 12/15)
 
 audio:
   entrada: null           # null = microfone padrão do Windows

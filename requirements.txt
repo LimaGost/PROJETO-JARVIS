@@ -8,3 +8,11 @@ nvidia-cudnn-cu12==9.*
 openwakeword
 webrtcvad-wheels
 piper-tts
+# fase 2: ferramentas
+psutil
+pycaw
+comtypes
+ddgs
+send2trash
+# testes
+pytest

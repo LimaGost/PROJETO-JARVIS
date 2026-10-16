@@ -24,6 +24,21 @@ def normalizar(texto: str) -> str:
     return " ".join(re.sub(r"[^\w\s]", " ", sem_acento).split())
 
 
+PALAVRAS_SIM = {"sim", "confirmo", "confirma", "confirmado", "pode", "autorizo", "autorizado", "claro",
+                "isso", "positivo", "manda", "faz", "faca", "ok", "okay", "certo", "beleza", "prossiga"}
+PALAVRAS_NAO = {"nao", "cancela", "cancelar", "cancelado", "negativo", "espera", "nunca", "nem", "pare", "jamais"}
+
+
+def sim_ou_nao(texto: str) -> bool:
+    """Resposta a um pedido de confirmação. Na dúvida é NÃO: só aceita um sim claro e sem negação."""
+    palavras = normalizar(texto).split()
+    if not palavras or palavras == ["para"]:  # 'para' só é negação sozinho ('pode apagar para mim' é sim)
+        return False
+    if any(p in PALAVRAS_NAO for p in palavras):
+        return False
+    return any(p in PALAVRAS_SIM for p in palavras)
+
+
 def identificar(texto: str) -> str | None:
     t = normalizar(texto)
     if not t or len(t.split()) > MAX_PALAVRAS:
