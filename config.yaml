@@ -1,0 +1,41 @@
+nome: Jarvis
+tratamento: senhor
+
+llm:
+  modelo: qwen3:8b
+  host: http://127.0.0.1:11434   # NÃO use "localhost": no Windows custa +2 s por pergunta (tenta IPv6 primeiro)
+  keep_alive: -1          # mantém o modelo na GPU
+  max_turnos: 10          # quantas trocas lembrar na conversa atual
+  temperatura: 0.6
+
+audio:
+  entrada: null           # null = microfone padrão do Windows
+  saida: null             # null = alto-falante padrão
+  taxa: 16000
+
+wakeword:
+  modelo: data/wakeword/hey_jarvis_v0.1.onnx
+  limiar: 0.5
+
+vad:
+  agressividade: 3        # 0 a 3 (3 = mais rígido com ruído; no seu microfone, 2 confundia ruído com voz)
+  silencio_ms: 900        # quanto silêncio encerra a sua fala
+  espera_inicio_s: 5      # tempo para começar a falar depois do chamado
+  max_fala_s: 20
+
+conversa:
+  janela_followup_s: 6    # depois de responder, escuta sem precisar do "Hey Jarvis"
+
+stt:
+  modelo: small           # tiny | base | small | medium
+  dispositivo: cuda
+  tipo: float16
+  idioma: pt
+  beam: 3
+  # ajuda o Whisper com nomes próprios; acrescente os apps e termos que você mais usa
+  vocabulario: "Conversa em português do Brasil com o assistente Jarvis. Discord, Spotify, WhatsApp, Chrome, Visual Studio Code, Microvix, OpenClaw, Ollama, Qwen, PowerShell."
+  # large-v3-turbo é mais preciso, mas usa +450 MB de VRAM e sua GPU já está no limite
+
+tts:
+  voz: data/voices/pt_BR-faber-medium.onnx
+  velocidade: 1.0         # menor = mais rápido

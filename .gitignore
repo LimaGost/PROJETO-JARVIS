@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+# modelos baixados (grandes) e dados pessoais do Jarvis
+data/voices/
+data/wakeword/
+data/memoria/
+data/logs/
