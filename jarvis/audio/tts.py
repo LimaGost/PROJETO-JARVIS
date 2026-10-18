@@ -1,5 +1,6 @@
 import os
 import queue
+import re
 import shutil
 import threading
 import time
@@ -15,6 +16,42 @@ from jarvis.hud.bus import bus
 
 TAXA_CLONE = 24000
 ESPERA_VOZ_S = 60   # numa queda da voz clonada, quanto esperar ela voltar antes de pular a frase
+RESERVA_S = 1.2     # áudio acumulado antes de começar a tocar: folga para a GPU não deixar a fala "engasgar"
+FOLGA_VELOCIDADE = 2.0  # se a voz já sai 2x mais rápido que o tempo real, não precisa esperar a reserva toda
+MAX_TRECHO = 110    # caracteres por pedido à voz clonada (veja dividir_frase)
+
+
+def dividir_frase(texto: str, maximo: int = MAX_TRECHO) -> list[str]:
+    """Quebra frase longa nas vírgulas/ponto e vírgula/dois-pontos, em trechos de até `maximo` caracteres.
+
+    Por quê: no streaming do XTTS cada pedaço novo re-decodifica o áudio da frase inteira, então o fim de uma frase
+    longa sai cada vez mais devagar e a fala trava no meio. Trechos curtos mantêm a geração à frente do áudio, e a
+    quebra cai onde a pessoa já faria uma pausa. Sem pontuação, quebra no espaço mais perto do limite."""
+    texto = texto.strip()
+    if len(texto) <= maximo:
+        return [texto] if texto else []
+    partes = [p.strip() for p in re.split(r"(?<=[,;:])\s+", texto) if p.strip()]
+    trechos: list[str] = []
+    atual = ""
+    for parte in partes:
+        while len(parte) > maximo:                       # um pedaço sem vírgula grande demais
+            corte = parte.rfind(" ", 0, maximo)
+            corte = corte if corte > maximo // 3 else maximo
+            if atual:
+                trechos.append(atual)
+                atual = ""
+            trechos.append(parte[:corte].strip())
+            parte = parte[corte:].strip()
+        if not atual:
+            atual = parte
+        elif len(atual) + 1 + len(parte) <= maximo:
+            atual = f"{atual} {parte}"
+        else:
+            trechos.append(atual)
+            atual = parte
+    if atual:
+        trechos.append(atual)
+    return trechos
 
 
 def _dados_espeak() -> str:
@@ -48,6 +85,9 @@ class Voz:
         self.saida = cfg["audio"]["saida"]
         self.clone = None
         self.reserva_piper = t.get("motor", "piper") != "clone" or t.get("reserva_piper", False)
+        clone_cfg = t.get("clone", {}) or {}
+        self.reserva_s = float(clone_cfg.get("reserva_s", RESERVA_S))
+        self.max_trecho = int(clone_cfg.get("max_trecho", MAX_TRECHO))
         self._piper = None
         if t.get("motor", "piper") == "clone":
             try:
@@ -93,6 +133,13 @@ class Voz:
         texto = texto.strip()
         if not texto:
             return
+        if self.clone is not None and texto not in self._cache:
+            for trecho in dividir_frase(texto, self.max_trecho):
+                self._falar_um(trecho)
+            return
+        self._falar_um(texto)
+
+    def _falar_um(self, texto: str):
         fonte = None
         if texto in self._cache:
             fonte = _de_memoria(self._cache[texto])
@@ -184,10 +231,24 @@ class Voz:
         tocou = False
         pedacos = []
         try:
-            with sd.OutputStream(samplerate=TAXA_CLONE, channels=1, dtype="int16", device=self.saida) as saida:
+            fluxo = iter(fonte)
+            reserva = self._encher_reserva(fluxo, geracao)
+            if geracao != self._geracao:
+                fonte.close()
+                return True
+            if not reserva:
+                fonte.close()
+                return False
+            tocou = True
+            # latency "high": buffer maior na placa de som, um soluço da GPU não vira estalo no alto-falante
+            with sd.OutputStream(samplerate=TAXA_CLONE, channels=1, dtype="int16", device=self.saida,
+                                 latency="high") as saida:
                 try:
-                    for pedaco in fonte:
-                        tocou = True
+                    pedacos.extend(reserva)
+                    if not self._escrever(saida, np.concatenate(reserva), TAXA_CLONE, geracao):
+                        saida.abort()
+                        return True
+                    for pedaco in fluxo:
                         pedacos.append(pedaco)
                         if not self._escrever(saida, pedaco, TAXA_CLONE, geracao):
                             saida.abort()
@@ -200,6 +261,24 @@ class Voz:
         except Exception as e:
             print(f"[tts] voz clonada falhou ({e}).")
         return tocou
+
+    def _encher_reserva(self, fluxo, geracao: int) -> list[np.ndarray]:
+        """Junta áudio antes de tocar: `reserva_s` segundos, ou menos se a voz já está saindo bem mais rápido que o
+        tempo real (frase adiantada, GPU folgada). Assim a primeira palavra não atrasa à toa e o meio não trava."""
+        reserva: list[np.ndarray] = []
+        juntos = 0
+        alvo = int(self.reserva_s * TAXA_CLONE)
+        inicio = time.monotonic()
+        for pedaco in fluxo:
+            if geracao != self._geracao:
+                break
+            reserva.append(pedaco)
+            juntos += len(pedaco)
+            duracao = juntos / TAXA_CLONE
+            espera = time.monotonic() - inicio
+            if juntos >= alvo or (duracao >= 0.3 and duracao >= FOLGA_VELOCIDADE * espera):
+                break
+        return reserva
 
     def _tocar(self, texto: str, geracao: int, fonte=None):
         if self.clone is None:

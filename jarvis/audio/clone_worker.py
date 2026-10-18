@@ -42,9 +42,15 @@ def etapa(nome: str):
 
 def latentes(modelo, referencia: str, dispositivo: str):
     """O "molde" da voz sai do áudio de referência. Calcular custa alguns segundos a cada partida, então fica
-    salvo ao lado do áudio e só é refeito se o arquivo de referência mudar."""
+    salvo ao lado do áudio e só é refeito se o arquivo de referência mudar.
+
+    Usa a referência inteira (até 30 s) para a entonação: o padrão do get_conditioning_latents é só 6 s, e o
+    jeito de falar do Jarvis (pausas, cadência) fica no resto do áudio."""
+    cfg = getattr(modelo, "config", None)
+    janela = int(getattr(cfg, "gpt_cond_len", 30) or 30)
+    pedaco = int(getattr(cfg, "gpt_cond_chunk_len", 4) or 4)
     info = os.stat(referencia)
-    chave = f"{info.st_size}-{int(info.st_mtime)}"
+    chave = f"{info.st_size}-{int(info.st_mtime)}-{janela}-{pedaco}"
     cache = referencia + ".latentes.pt"
     try:
         dados = torch.load(cache, map_location=dispositivo, weights_only=True)
@@ -52,7 +58,12 @@ def latentes(modelo, referencia: str, dispositivo: str):
             return dados["latente"], dados["embedding"]
     except Exception:
         pass   # sem cache ou cache de outra versão: calcula de novo
-    latente, embedding = modelo.get_conditioning_latents(audio_path=[referencia])
+    try:
+        latente, embedding = modelo.get_conditioning_latents(audio_path=[referencia], gpt_cond_len=janela,
+                                                             gpt_cond_chunk_len=pedaco, max_ref_length=30)
+    except TypeError:   # versão do Coqui sem esses parâmetros: usa o padrão dela em vez de derrubar a voz
+        etapa("aviso: get_conditioning_latents sem gpt_cond_len; usando o padrão")
+        latente, embedding = modelo.get_conditioning_latents(audio_path=[referencia])
     try:
         torch.save({"chave": chave, "latente": latente.cpu(), "embedding": embedding.cpu()}, cache)
     except Exception:
@@ -66,6 +77,11 @@ def enviar(id_: int, dados: bytes = b""):
 
 def main():
     referencia, velocidade, temperatura, dispositivo = sys.argv[1], float(sys.argv[2]), float(sys.argv[3]), sys.argv[4]
+    extra = json.loads(sys.argv[5]) if len(sys.argv) > 5 else {}
+    # amostragem mais contida que o padrão do XTTS (top_k 50, top_p 0.85): menos sílaba repetida e palavra embolada
+    top_k, top_p = int(extra.get("top_k", 30)), float(extra.get("top_p", 0.8))
+    repeticao = float(extra.get("repeticao", 10.0))
+    pedaco_stream = int(extra.get("pedaco", 20))
     etapa("bibliotecas carregadas")
     tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(dispositivo)
     modelo = tts.synthesizer.tts_model
@@ -97,8 +113,9 @@ def main():
     threading.Thread(target=ler, daemon=True).start()
 
     def sintetizar(texto: str, id_: int):
-        for trecho in modelo.inference_stream(texto, "pt", latente, embedding, stream_chunk_size=20, speed=velocidade,
-                                              temperature=temperatura, enable_text_splitting=True):
+        for trecho in modelo.inference_stream(texto, "pt", latente, embedding, stream_chunk_size=pedaco_stream,
+                                              speed=velocidade, temperature=temperatura, top_k=top_k, top_p=top_p,
+                                              repetition_penalty=repeticao, enable_text_splitting=True):
             if cancelar.is_set():
                 return
             pcm = (trecho.clamp(-1, 1).cpu().numpy() * 32767).astype(np.int16)

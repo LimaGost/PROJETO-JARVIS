@@ -165,3 +165,88 @@ def test_resumo_de_uso(tmp_path):
     r = resumo_uso("hoje", tmp_path, agora)
     assert r.startswith("Hoje: 1 pedidos") and "US$ 0,01" in r and "27.000" in r
     assert "nenhum pedido" in resumo_uso("hoje", tmp_path / "vazio", agora)
+
+
+# ------------------------------------------------------------------ fluidez: frase longa e reserva de áudio
+FRASE_LONGA = ("Senhor, verifiquei os seus compromissos de amanhã, e há uma reunião às nove horas com a equipe de "
+               "implantação, um almoço marcado ao meio-dia, e no fim da tarde a revisão do projeto Jarvis.")
+
+
+def test_frase_curta_nao_e_dividida():
+    assert tts.dividir_frase("Pois não, senhor?") == ["Pois não, senhor?"]
+    assert tts.dividir_frase("   ") == []
+
+
+def test_frase_longa_quebra_nas_virgulas_sem_perder_nada():
+    trechos = tts.dividir_frase(FRASE_LONGA, 110)
+    assert len(trechos) >= 2 and all(len(t) <= 110 for t in trechos)
+    assert " ".join(trechos) == FRASE_LONGA
+    assert all(t.endswith((",", ".")) for t in trechos)     # a quebra cai numa pausa natural
+
+
+def test_frase_longa_sem_pontuacao_quebra_no_espaco():
+    texto = " ".join(["palavra"] * 40)
+    trechos = tts.dividir_frase(texto, 60)
+    assert all(len(t) <= 60 for t in trechos) and " ".join(trechos) == texto
+
+
+def test_frase_longa_vira_varios_pedidos_a_voz(voz):
+    voz.clone = CloneFalso()
+    voz.falar(FRASE_LONGA)
+    voz.esperar()
+    pedidos = [p[1] for p in voz.clone.pedidos]
+    assert len(pedidos) >= 2 and " ".join(pedidos) == FRASE_LONGA
+
+
+class CloneLento(CloneFalso):
+    """Gera 0,1 s de áudio a cada 0,05 s (2x o tempo real) ou mais devagar, para medir a reserva."""
+
+    def __init__(self, intervalo):
+        super().__init__()
+        self.intervalo = intervalo
+
+    def pedir(self, texto):
+        self.pedidos.append((time.monotonic(), texto))
+
+        def gerar():
+            for _ in range(20):
+                time.sleep(self.intervalo)
+                yield np.zeros(2400, dtype=np.int16)
+        return gerar()
+
+
+def _primeira_escrita(voz, monkeypatch):
+    marcas = []
+    original = SaidaFalsa.write
+    monkeypatch.setattr(SaidaFalsa, "write", lambda self, d: (marcas.append(time.monotonic()), original(self, d)))
+    return marcas
+
+
+def test_voz_lenta_junta_reserva_antes_de_tocar(voz, monkeypatch):
+    voz.clone = CloneLento(0.09)          # mais devagar que 2x: precisa da reserva toda
+    voz.reserva_s = 0.5
+    marcas = _primeira_escrita(voz, monkeypatch)
+    t0 = time.monotonic()
+    voz.falar("Teste.")
+    voz.esperar()
+    assert marcas[0] - t0 >= 0.4          # esperou ~5 pedaços (0,5 s de áudio) antes da 1ª escrita
+
+
+def test_voz_rapida_comeca_logo(voz, monkeypatch):
+    voz.clone = CloneLento(0.01)          # 10x o tempo real: não faz sentido esperar
+    voz.reserva_s = 2.0
+    marcas = _primeira_escrita(voz, monkeypatch)
+    t0 = time.monotonic()
+    voz.falar("Teste.")
+    voz.esperar()
+    assert marcas[0] - t0 < 0.15
+
+
+def test_calar_durante_a_reserva_nao_toca_nada(voz):
+    voz.clone = CloneLento(0.1)
+    voz.reserva_s = 5.0
+    voz.falar("Teste.")
+    time.sleep(0.15)
+    voz.calar()
+    voz.esperar()
+    assert SaidaFalsa.tocado == []

@@ -88,6 +88,10 @@ tts:
     referencia: data/voices/jarvis_ucm/referencia.wav
     velocidade: 1.0       # 0.7 a 1.5
     temperatura: 0.65     # menor = mais estável/monótona; maior = mais expressiva (e mais erros)
+    top_k: 30             # amostragem mais contida que o padrão do XTTS (50): menos sílaba repetida/embolada
+    top_p: 0.8            # idem (padrão 0.85). Voz robótica demais? suba os dois (50 / 0.85)
+    reserva_s: 1.2        # áudio juntado antes de tocar. Ainda engasga no meio da frase? suba para 2.0
+    max_trecho: 110       # frase maior que isso é quebrada nas vírgulas (frase longa no XTTS fica cada vez mais lenta)
     dispositivo: cuda     # cuda | cpu (cpu é lento demais para conversar)
   # abaixo: voz Piper (reserva)
   voz: data/voices/pt_BR-faber-medium.onnx

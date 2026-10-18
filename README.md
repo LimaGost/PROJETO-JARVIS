@@ -89,7 +89,11 @@ python -m venv .venv-voz
 .venv-voz\Scripts\python.exe -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
 .venv-voz\Scripts\python.exe -m pip install coqui-tts soundfile numpy
 ```
-Coloque um áudio de referência limpo da voz (de 6 a 30 s, `.wav`) em `data/voices/jarvis_ucm/referencia.wav`. O modelo XTTS-v2 (~1,8 GB) é baixado na primeira vez que a voz sobe. A licença do XTTS-v2 (CPML) é só para **uso não comercial**.
+Gere o áudio de referência a partir do vídeo/áudio com a voz (10 a 30 s de fala, sem música). O script deixa mono 24 kHz,
+corta silêncio, encurta pausas longas e acerta o volume, e salva em `data/voices/jarvis_ucm/referencia.wav`:
+```powershell
+.venv\Scripts\python.exe -m jarvis.audio.preparar_voz "VOZ JARVIS UCM]\Gravando 2026-10-17 131614.mp4"
+``` O modelo XTTS-v2 (~1,8 GB) é baixado na primeira vez que a voz sobe. A licença do XTTS-v2 (CPML) é só para **uso não comercial**.
 
 **6. Voz Piper (alternativa leve, `tts.motor: piper`)** em `data/voices/` (precisa do `.onnx` e do `.onnx.json`):
 ```powershell
@@ -158,6 +162,10 @@ O **Ollama precisa estar aberto** (ícone na bandeja ou `ollama serve`). Na part
   A autorização 🔴 continua.
 - **Uma voz só:** a do Jarvis (XTTS). Na partida ele espera ela ficar pronta antes de falar; se ela cair, espera voltar
   (`tts.reserva_piper: false`). Erros do processo da voz ficam em `data/logs/voz_clonada.log`.
+- **Voz sem engasgo (2026-10-18):** a fala só começa a tocar com 1,2 s de áudio de folga (ou na hora, se a GPU já está
+  gerando 2x mais rápido que o tempo real), e frase acima de 110 caracteres é quebrada nas vírgulas: no streaming do
+  XTTS o fim de uma frase longa sai cada vez mais devagar, e era aí que travava. O molde usa a referência inteira
+  (até 30 s), não só os 6 s do padrão, e a amostragem é mais contida (`top_k 30`, `top_p 0.8`). Ajustes em `tts.clone`.
 - **Fala emendada:** cada frase é pedida à voz no momento em que o cérebro a escreve, então a próxima já está pronta
   quando a atual acaba. Medido: 0 silêncios entre 4 frases (antes, 3 pausas somando 1,5 s).
 - **Conversa corrida:** depois de responder ele escuta por 10 s sem precisar do "Hey Jarvis" (`conversa.janela_followup_s`).

@@ -34,7 +34,9 @@ class VozClonada:
             raise ErroClone(f"ambiente da voz não encontrado: {self.python}")
         if not self.referencia.exists():
             raise ErroClone(f"áudio de referência não encontrado: {self.referencia}")
-        self.args = [str(self.referencia), str(c.get("velocidade", 1.0)), str(c.get("temperatura", 0.65)), c.get("dispositivo", "cuda")]
+        extra = {k: c[k] for k in ("top_k", "top_p", "repeticao", "pedaco") if k in c}
+        self.args = [str(self.referencia), str(c.get("velocidade", 1.0)), str(c.get("temperatura", 0.65)),
+                     c.get("dispositivo", "cuda"), json.dumps(extra)]
         self.pronto = threading.Event()
         self._proc: subprocess.Popen | None = None
         self._id = 0
