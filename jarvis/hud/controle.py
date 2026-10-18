@@ -268,6 +268,7 @@ class Controle:
             bus.emitir("sistema", texto="Este JARVIS não tem seletor de mentalidade.")
             return
         if not self.turno_lock.acquire(timeout=90):
+            self.enviar_cerebro()  # a HUD já marcou "trocando": devolve o estado real para ela liberar os botões
             bus.emitir("sistema", texto="Estou no meio de um pedido; tente trocar de novo em instantes.")
             return
         try:

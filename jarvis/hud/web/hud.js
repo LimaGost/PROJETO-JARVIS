@@ -24,9 +24,30 @@ const MAX_MSGS = 80;
 const S = {
   ws: null, tentativas: 0, conectado: false, estado: "iniciando", falando: false, mudo: false,
   nivel: { mic: 0, voz: 0 }, historicoNiveis: new Array(72).fill(0),
-  msgAtual: null, fatos: [], pendente: null, stats: { cpu: [], gpu: [] },
+  msgAtual: null, fatos: [], pendente: null, stats: { cpu: [], gpu: [] }, cerebro: null,
 };
 const token = document.querySelector('meta[name="jarvis-token"]').content;
+
+/* ============================================================ mentalidade (Qwen / Claude) */
+function renderCerebros() {
+  const c = S.cerebro, caixa = $("cerebros");
+  caixa.hidden = !(c && c.opcoes && c.opcoes.length > 1);
+  if (caixa.hidden) return;
+  caixa.replaceChildren();
+  for (const o of c.opcoes) {
+    const b = el("button", "btn cerebro", o.nome);
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(!!o.ativo));
+    b.title = o.disponivel ? o.descricao : `Indisponível: ${o.motivo}`;
+    b.disabled = !o.disponivel || !S.conectado || !!c.trocando;
+    if (c.trocando === o.id) b.classList.add("trocando");
+    if (!o.ativo) b.addEventListener("click", () => {
+      S.cerebro = { ...c, trocando: o.id }; renderCerebros();
+      enviar({ tipo: "trocar_cerebro", id: o.id });
+    });
+    caixa.appendChild(b);
+  }
+}
 
 /* ============================================================ estado visível */
 function estadoVisivel() {
@@ -160,6 +181,7 @@ function aplicar(ev) {
     case "memoria": S.fatos = ev.fatos || []; renderMemoria(); break;
     case "nivel": S.nivel = { mic: ev.mic || 0, voz: ev.voz || 0 }; break;
     case "stats": aplicarStats(ev); break;
+    case "cerebro": S.cerebro = ev; renderCerebros(); break;
   }
 }
 
@@ -169,6 +191,7 @@ function hello(ev) {
   S.estado = ev.estado; S.falando = !!ev.falando; S.mudo = !!ev.mudo; S.detalhe = "";
   $("btn-mudo").setAttribute("aria-pressed", String(S.mudo));
   $("btn-mudo").hidden = !ev.tem_mic;
+  S.cerebro = ev.cerebro || null; renderCerebros();
   $("conversa").replaceChildren(); S.msgAtual = null;
   for (const h of ev.historico || []) aplicar(h);
   atualizarEstado();
@@ -213,6 +236,7 @@ function conectar() {
     $("chip-conexao").textContent = "desconectado"; $("chip-conexao").className = "chip off";
     $("entrada").disabled = true; $("enviar").disabled = true;
     $("offline").hidden = false;
+    renderCerebros();
     fecharConfirmacao();
     S.tentativas++;
     setTimeout(conectar, Math.min(5000, 400 * S.tentativas));

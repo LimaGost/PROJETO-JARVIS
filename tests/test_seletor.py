@@ -263,6 +263,18 @@ def test_controle_espera_o_pedido_em_andamento_acabar_antes_de_trocar():
     assert s.atual == "claude-cli"
 
 
+def test_controle_ocupado_demais_devolve_o_estado_para_a_hud():
+    class Travado:
+        def acquire(self, timeout=None): return False
+    s = seletor()
+    c = controle(s)
+    c.turno_lock = Travado()
+    cer = eventos("cerebro")
+    c.trocar_cerebro("claude-cli")
+    assert s.atual == "qwen"
+    assert cer and cer[-1]["trocando"] is None and cer[-1]["atual"] == "qwen"   # a HUD sai do "trocando"
+
+
 def test_controle_por_alvo_claude_indisponivel_avisa():
     voz = Voz()
     s = seletor(indisponiveis={"claude-cli": "x", "claude-api": "y"})
@@ -278,6 +290,14 @@ def test_comando_digitado_na_hud_troca():
     assert s.atual == "claude-cli"
     c.texto_do_hud("muda para o qwen")
     assert s.atual == "qwen"
+
+
+def test_hello_antes_de_aquecer_com_o_claude_salvo_nao_quebra():
+    modulo.salvar_preferencia("claude-cli")
+    s = seletor()
+    c = controle(s)
+    h = c.hello()                                            # a HUD conecta enquanto o Jarvis ainda carrega
+    assert s.atual == "claude-cli" and h["cerebro"]["rotulo"] == "Claude · assinatura"
 
 
 def test_hello_leva_o_estado_do_seletor():

@@ -126,7 +126,10 @@ class Seletor:
 
     @property
     def rotulo(self) -> str:
-        return getattr(self._ativo(), "rotulo", self.atual)
+        obj = self._objetos.get(self.atual)   # antes do aquecer() o Claude escolhido ainda não existe (a HUD já pergunta)
+        if obj is None:
+            return self._meta()[self.atual]["nome"]
+        return getattr(obj, "rotulo", self.atual)
 
     @property
     def historico(self):

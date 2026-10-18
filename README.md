@@ -134,8 +134,9 @@ O **Ollama precisa estar aberto** (ícone na bandeja ou `ollama serve`). Na part
   pedidos das últimas 12 h e ele continua de onde parou. Só "esqueça a conversa" corta essa continuidade.
 - **Interromper não derruba a conversa:** falar por cima ou "parar tudo" interrompe só o pedido em andamento
   (`control_request interrupt` do `claude`); o processo e o contexto continuam. Antes o processo era morto.
-- **A HUD mostra o Jarvis, não as engrenagens:** sem painel de ações, de mentalidade, de permissões, chip do modelo
-  e botão "Nova conversa". Ficam o núcleo, a conversa, o sistema, a memória, Mudo e Parar. A autorização 🔴 continua.
+- **A HUD mostra o Jarvis, não as engrenagens:** sem painel de ações, de permissões, chip do modelo e botão
+  "Nova conversa". Ficam o núcleo, a conversa, o sistema, a memória, o seletor de mentalidade, Mudo e Parar.
+  A autorização 🔴 continua.
 - **Uma voz só:** a do Jarvis (XTTS). Na partida ele espera ela ficar pronta antes de falar; se ela cair, espera voltar
   (`tts.reserva_piper: false`). Erros do processo da voz ficam em `data/logs/voz_clonada.log`.
 - **Fala emendada:** cada frase é pedida à voz no momento em que o cérebro a escreve, então a próxima já está pronta
@@ -178,8 +179,11 @@ com um print da tela ~US$ 0,01. Na assinatura nada disso é cobrado à parte: co
   para 4–5, ou use `por_voz: false` (aí só o "Hey Jarvis" interrompe). Com fone de ouvido funciona melhor.
 
 ## Trocar a mentalidade (Qwen ⇄ Claude), a qualquer hora
-Dois jeitos, sem reiniciar: por voz/texto ("usa o Claude", "muda para o Qwen", "volta pro local") ou o `cerebro.motor`
-do `config.yaml` (só a escolha inicial). O painel da HUD foi tirado (2026-10-17): para o usuário, é um Jarvis só.
+Três jeitos, sem reiniciar:
+- **Na HUD:** os botões **Qwen local · Claude · assinatura · Claude · API** no rodapé (voltaram em 2026-10-18). O ativo fica
+  destacado; o que não está disponível fica apagado e o motivo aparece ao passar o mouse (ex.: "falta a chave em data/anthropic.key").
+- **Por voz/texto:** "usa o Claude", "muda para o Qwen", "volta pro local".
+- **`cerebro.motor` no `config.yaml`:** só a escolha inicial.
 - A escolha fica salva em `data/preferencias.json` (ignorado pelo git) e vale na próxima vez que ligar.
 - A troca espera o pedido atual acabar, sobe e testa a nova mentalidade **antes** de largar a antiga; se falhar, continua na atual e avisa.
 - A conversa continua ao trocar (a nova mentalidade recebe a conversa recente); a memória de longo prazo é a mesma.

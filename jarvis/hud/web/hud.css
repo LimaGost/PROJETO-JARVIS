@@ -229,6 +229,11 @@ footer::before { content: ""; position: absolute; left: 0; right: 0; top: 0; hei
 #entrada:focus { outline: none; border-color: var(--ciano); box-shadow: inset 0 0 18px rgba(34, 216, 255, .18), 0 0 0 3px rgba(34, 216, 255, .14); }
 #entrada:disabled { opacity: .5; }
 .botoes { display: flex; gap: 8px; }
+.cerebros { display: flex; gap: 4px; }
+.cerebros .btn { padding-left: 10px; padding-right: 10px; white-space: nowrap; }
+.cerebros .btn[aria-pressed="true"] { cursor: default; }
+.btn.trocando { animation: trocando 1s ease-in-out infinite alternate; }
+@keyframes trocando { from { box-shadow: inset 0 0 4px rgba(34, 216, 255, .2); } to { box-shadow: inset 0 0 16px rgba(34, 216, 255, .7); } }
 .btn {
   background: linear-gradient(180deg, rgba(34, 216, 255, .16), rgba(34, 216, 255, .05)); border: 1px solid var(--borda); color: var(--ciano-forte); padding: 9px 18px;
   font: 600 12px var(--tit); letter-spacing: .16em; text-transform: uppercase; cursor: pointer; transition: background .15s, box-shadow .15s, color .15s;
@@ -273,7 +278,7 @@ footer::before { content: ""; position: absolute; left: 0; right: 0; top: 0; hei
   header { grid-template-columns: 1fr auto; }
   .cronos, .marca .sub, .sinal { display: none; }
   footer { flex-direction: column; align-items: stretch; }
-  .botoes .btn { flex: 1; }
+  .botoes .btn, .cerebros .btn { flex: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
