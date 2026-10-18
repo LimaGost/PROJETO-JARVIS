@@ -33,8 +33,8 @@ class Executor:
         self.ao_comecar: Callable[[str, str], None] | None = None  # (nome, nível): a ação vai começar agora
 
     def schemas(self, visao: bool = False) -> list[dict]:
-        """visao=False (Qwen local): sem as ferramentas que devolvem imagem, que ele não enxerga."""
-        return [f.schema() for f in self.registro.values() if visao or not f.visao]
+        """visao=False (Qwen local): sem as ferramentas que devolvem imagem, que ele não enxerga, nem as só do Claude."""
+        return [f.schema() for f in self.registro.values() if visao or not (f.visao or f.so_claude)]
 
     def novo_turno(self):
         self._negou_no_turno = False

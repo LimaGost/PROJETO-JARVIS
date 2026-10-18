@@ -18,4 +18,5 @@
 - O Iury quer um Jarvis só: nada de mostrar engrenagens na HUD (ações, chip do modelo, permissões); a exceção é o seletor Qwen/Claude no rodapé, que o Iury pediu de volta em 2026-10-18, nunca trocar de voz (só a clonada) e a conversa nunca recomeça sozinha (continuidade pelo banco, interrupção sem matar o `claude`).
 - `programar` põe o Claude Code (Sonnet) para trabalhar no projeto aberto no VS Code, em segundo plano, com arquivos + comandos (escolha do Iury), sem git push e fora do E:. Avisos de tarefas terminadas passam por `jarvis/brain/avisos.py`.
 - Os `__pycache__` de testes vieram do E: com caminhos de lá: se aparecer `E:\` num traceback, apague os `__pycache__` do projeto.
+- Gmail, Agenda e WhatsApp (`gmail.py`, `agenda.py`, `whatsapp.py`, login em `google_api.py`) são `so_claude=True`: o Qwen não recebe. Enviar e-mail e WhatsApp é sempre 🔴 (escolha do Iury); não há ferramenta de apagar e-mail.
 - Chaves de API nunca vão no `config.yaml`. A HUD só escuta em 127.0.0.1.

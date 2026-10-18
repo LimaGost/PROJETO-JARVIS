@@ -38,6 +38,7 @@ class Ferramenta:
     # (args -> bool) quando depende do resultado, ex.: ver_janela de um navegador sim, da Calculadora não.
     externo: "bool | Callable[[dict], bool]" = False
     visao: bool = False   # devolve imagem: só vai para cérebros que enxergam (Claude), não para o Qwen local
+    so_claude: bool = False  # só para os cérebros Claude: o contexto de 6144 tokens do Qwen não comporta tudo
 
     def e_externo(self, args: dict) -> bool:
         return bool(self.externo(args)) if callable(self.externo) else bool(self.externo)
@@ -68,11 +69,11 @@ AO_NOVO_PEDIDO: list[Callable[[], None]] = []  # ferramentas com estado (ex.: n�
 
 def ferramenta(nome: str, descricao: str, parametros: dict | None = None, obrigatorios=(),
                nivel: Nivel = Nivel.LIVRE, avaliar: Callable[[dict], Avaliacao] | None = None, externo: bool = False,
-               visao: bool = False):
+               visao: bool = False, so_claude: bool = False):
     """Decorador: registra a função como ferramenta disponível para o Jarvis."""
     def registrar(func):
         REGISTRO[nome] = Ferramenta(nome, descricao, func, parametros or {}, tuple(obrigatorios), avaliar, nivel,
-                                    externo, visao)
+                                    externo, visao, so_claude)
         return func
     return registrar
 

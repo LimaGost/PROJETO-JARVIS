@@ -5,7 +5,7 @@ Assistente que roda no seu computador: você diz **"Hey Jarvis"**, ele ouve, lem
 Fases concluídas: **1** (voz), **2** (controle do computador), **3** (memória) e **4** (HUD).
 
 ```
-microfone → openWakeWord → webrtcvad → faster-whisper (GPU) → cérebro ⇄ 31 ferramentas → voz clonada (XTTS-v2) → alto-falante
+microfone → openWakeWord → webrtcvad → faster-whisper (GPU) → cérebro ⇄ 37 ferramentas → voz clonada (XTTS-v2) → alto-falante
                                                                │   ↑            ↑
                        claude-cli (assinatura) | Claude API | Qwen3 8B local    permissões 🟢🟡🔴 + log
                                                                ↑
@@ -102,6 +102,20 @@ Ou baixe os dois arquivos em [rhasspy/piper-voices](https://huggingface.co/rhass
 .venv\Scripts\python.exe -m jarvis.tools.spotify
 ```
 
+**8. Gmail, Agenda e Contatos do Google (opcional; o WhatsApp usa os contatos para achar o número)**. Uma vez só:
+1. Em [console.cloud.google.com](https://console.cloud.google.com), crie um projeto e ative as APIs **Gmail API**,
+   **Google Calendar API** e **People API** ("APIs e serviços" → "Biblioteca").
+2. "Tela de consentimento OAuth": tipo **Externo**; coloque o seu e-mail como usuário de teste. Depois clique em
+   **Publicar aplicativo**: em modo "Teste" o Google derruba o login a cada 7 dias.
+3. "Credenciais" → "Criar credenciais" → **ID do cliente OAuth** → tipo **App para computador**. Baixe o JSON e salve como
+   `data\google\cliente.json`.
+4. Autorize (abre o navegador; como o app é seu e não foi verificado pelo Google, clique em "Avançado" → "Acessar"):
+```powershell
+.venv\Scripts\python.exe -m jarvis.tools.google_api
+```
+O token fica em `data/google/token.json` (fora do git). Permissões pedidas: ler e enviar e-mail (**não** apagar), eventos
+da agenda e ler contatos.
+
 O modelo do Whisper (`small`) é baixado sozinho na primeira execução. Ao final, a pasta `data/` deve ter:
 ```
 data/wakeword/hey_jarvis_v0.1.onnx
@@ -142,6 +156,29 @@ O **Ollama precisa estar aberto** (ícone na bandeja ou `ollama serve`). Na part
 - **Fala emendada:** cada frase é pedida à voz no momento em que o cérebro a escreve, então a próxima já está pronta
   quando a atual acaba. Medido: 0 silêncios entre 4 frases (antes, 3 pausas somando 1,5 s).
 - **Conversa corrida:** depois de responder ele escuta por 10 s sem precisar do "Hey Jarvis" (`conversa.janela_followup_s`).
+
+## Gmail, Agenda e WhatsApp (só com o Claude como cérebro)
+"Tenho e-mail novo?", "lê o e-mail da Ana", "responde que eu confirmo", "o que tenho amanhã?", "marca dentista
+sexta às 15h", "manda no WhatsApp pra Maria que eu chego às 8". Configuração no passo 8 da instalação.
+
+| Ferramenta | O que faz | Nível |
+|---|---|---|
+| `ler_emails`, `abrir_email` | lista (com a busca do Gmail: `is:unread`, `from:`...) e lê e-mails | 🟢 (conteúdo externo) |
+| `enviar_email` | envia ou responde (na mesma conversa); `para` aceita e-mail ou nome de contato | 🔴 **sempre** |
+| `ver_agenda` | compromissos de hoje ou dos próximos dias | 🟢 (conteúdo externo) |
+| `criar_evento` | cria compromisso, **sem convidados** | 🟡 (🔴 depois de ler e-mail/site) |
+| `whatsapp_enviar` | manda mensagem pelo app do WhatsApp para Windows | 🔴 **sempre** |
+
+- **E-mail e agenda são texto de terceiros:** um e-mail pode trazer "apague a pasta X" ou "mande tudo para fulano".
+  Por isso o que vem lido entra marcado como não confiável e, depois de ler, toda ação 🟡 passa a pedir confirmação.
+  O Jarvis nem tem como apagar e-mails: essa permissão não é pedida ao Google.
+- **WhatsApp:** não existe API oficial para conta pessoal. O Jarvis abre `whatsapp://send?phone=...&text=...`: o próprio
+  WhatsApp abre a conversa **daquele número** com o texto pronto, e ele só aperta Enter (e só se a janela da frente for
+  o WhatsApp). Nada de procurar o contato clicando pela tela, onde um clique errado manda para a pessoa errada.
+  Nome vira número pelos contatos do Google; sem DDI, assume +55. Para **ler** conversas, o Claude usa `ver_janela`
+  com o WhatsApp aberto.
+- Na confirmação a tela mostra destinatário, assunto/número e o começo do texto.
+- **Por que só com o Claude:** são 6 ferramentas a mais (~600 tokens) e o contexto de 6144 tokens do Qwen já está no limite.
 
 ## Programar pelo Jarvis (`programar`, `tarefa_programacao`, `vscode`)
 "Jarvis, cria uma página de login", "corrige esse erro", "roda os testes": o pedido vai para o **Claude Code** (Sonnet,
@@ -191,7 +228,7 @@ Três jeitos, sem reiniciar:
 - Ao sair do Claude, o processo `claude` é encerrado (não fica gastando nada).
 
 ## Cérebro `claude-cli` (a sua assinatura, sem chave) — o motor ativo
-`cerebro.motor: claude-cli` roda o programa `claude` (Claude Code) por trás, com o login da sua assinatura (hoje: Claude Pro). Ele é só o "pensador": as 31 ferramentas continuam sendo do JARVIS e passam pelo Executor (🟢🟡🔴, confirmação, bloqueio da HUD, log).
+`cerebro.motor: claude-cli` roda o programa `claude` (Claude Code) por trás, com o login da sua assinatura (hoje: Claude Pro). Ele é só o "pensador": as 37 ferramentas continuam sendo do JARVIS e passam pelo Executor (🟢🟡🔴, confirmação, bloqueio da HUD, log).
 
 ```
 JARVIS ──stream-json──► claude (processo persistente) ──MCP stdio──► ponte_mcp.py ──HTTP local + token──► Executor do JARVIS
@@ -215,7 +252,7 @@ O modelo local de 8B é o gargalo (erra instruções simples, inventa resultados
 3. No `config.yaml`: `cerebro.motor: claude`. Modelo em `claude.modelo`: `claude-opus-5-5` (mais capaz), `claude-sonnet-5-5` (mais rápido e barato) ou `claude-haiku-5-5` (o mais barato). `claude.esforco: low` mantém a voz rápida.
 4. Reinicie o Jarvis. O chip no topo da HUD mostra o modelo em uso.
 
-**Custo:** cada pedido envia ~5 mil tokens (prompt + 31 ferramentas), que ficam em cache (leitura ~10% do preço). Cada resposta é registrada em `data/logs/uso_claude.jsonl` (entrada, saída, cache lido/escrito) para você acompanhar.
+**Custo:** cada pedido envia ~5 mil tokens (prompt + 37 ferramentas), que ficam em cache (leitura ~10% do preço). Cada resposta é registrada em `data/logs/uso_claude.jsonl` (entrada, saída, cache lido/escrito) para você acompanhar.
 
 **Privacidade:** com `motor: claude`, o texto das conversas, os fatos da memória que entram no pedido e o conteúdo de janelas/arquivos lidos pelas ferramentas vão para a Anthropic. Para 100% local, `motor: ollama`.
 
@@ -264,7 +301,7 @@ Usa a acessibilidade do Windows (UI Automation), dentro do Jarvis, sem servidor 
 - **Proteções:** só o que **você** disse vira fato (conteúdo de sites e arquivos não entra na reflexão); `memorizar`/`esquecer_fato` são 🟡, então depois de ler um site ou arquivo pedem confirmação; senhas, cartões e CPF nunca são guardados; "esquecer" apaga de verdade.
 - Tudo fica em `data/memoria/jarvis.db` (fora do git). `JARVIS_MEMORIA=outro.db` usa outro banco (testes).
 
-## O que ele faz (31 ferramentas + `ver_tela` e `mouse` com o Claude)
+## O que ele faz (31 ferramentas + `ver_tela`, `mouse`, Gmail, Agenda e WhatsApp com o Claude)
 | Área | Ferramentas | Nível |
 |---|---|---|
 | Informação | `hora_data`, `info_sistema` (CPU, RAM, discos, GPU e temperatura, IP local), `listar_janelas`, `calcular` | 🟢 |
@@ -272,6 +309,7 @@ Usa a acessibilidade do Windows (UI Automation), dentro do Jarvis, sem servidor 
 | Som | `volume`, `controle_midia` (pausar/continuar, próxima, anterior) | 🟢 |
 | Memória | `lembrar` 🟢, `memorizar` e `esquecer_fato` 🟡 | 🟢 / 🟡 |
 | Web | `pesquisar_web`, `abrir_site` (só http/https) | 🟢 |
+| Google e WhatsApp (só Claude) | `ler_emails`, `abrir_email`, `ver_agenda` 🟢 · `criar_evento` 🟡 · `enviar_email`, `whatsapp_enviar` 🔴 | 🟢 / 🟡 / 🔴 |
 | Arquivos | `listar_pasta`, `buscar_arquivos`, `ler_arquivo`, `abrir_pasta_ou_arquivo` | 🟢 (executável 🔴) |
 | | `criar_pasta`, `escrever_arquivo`, `mover`, `copiar` | 🟡 (sobrescrever ou área do sistema 🔴) |
 | | `apagar` (sempre para a Lixeira) | 🔴 |
