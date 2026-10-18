@@ -207,18 +207,34 @@ class Reflexao:
                 self._escrever(f"ERRO: {type(e).__name__}: {e}")
         threading.Thread(target=tarefa, daemon=True).start()
 
-    def iniciar_zelador(self, aviso=print, intervalo_s: int = 300, ocioso_s: int = 900):
+    def iniciar_zelador(self, aviso=print, intervalo_s: int = 300, ocioso_s: int = 900,
+                        exigir_ocio=lambda: False):
         """Verifica de tempos em tempos: dias anteriores pendentes, ou conversas de hoje depois de
-        `ocioso_s` sem falar com o Jarvis. Assim o que foi dito hoje vira memória ainda hoje."""
+        `ocioso_s` sem falar com o Jarvis. Assim o que foi dito hoje vira memória ainda hoje.
+        `exigir_ocio()` True (Claude como cérebro): nada roda antes de `ocioso_s` parado, contando da partida.
+        A reflexão sobe o Qwen na GPU, e Qwen + voz clonada + Whisper não cabem em 8 GB: tudo fica lento."""
+        inicio = datetime.now()
+
         def vigiar():
             while True:
                 time.sleep(intervalo_s)
                 if self.ocupado.is_set():
                     continue
-                ultimo = self.memoria.ultimo_turno()
-                parado = ultimo is not None and (datetime.now() - ultimo).total_seconds() >= ocioso_s
-                self.em_segundo_plano(aviso, incluir_hoje=parado)
+                hoje = self.pode_rodar(ocioso_s, inicio, exigir_ocio())
+                if hoje is not None:
+                    self.em_segundo_plano(aviso, incluir_hoje=hoje)
         threading.Thread(target=vigiar, daemon=True).start()
+
+    def pode_rodar(self, ocioso_s: int, inicio: datetime, exigir_ocio: bool) -> bool | None:
+        """None = não rodar agora; senão, se as conversas de hoje já podem entrar (parado há `ocioso_s`)."""
+        ultimo = self.memoria.ultimo_turno()
+        parado_conversa = ultimo is not None and (datetime.now() - ultimo).total_seconds() >= ocioso_s
+        if not exigir_ocio:
+            return parado_conversa
+        referencia = max(ultimo or inicio, inicio)
+        if (datetime.now() - referencia).total_seconds() < ocioso_s:
+            return None
+        return parado_conversa
 
     def _esperar_livre(self):
         while self.ocupado.is_set():

@@ -141,6 +141,11 @@ O **Ollama precisa estar aberto** (ícone na bandeja ou `ollama serve`). Na part
 - **HUD:** abre sozinha em **http://127.0.0.1:8765** (ou na próxima porta livre; veja a linha "HUD em ..." no console). Dá para digitar pedidos, ver a conversa e a memória, e usar **PARAR TUDO** (Esc) e Mudo.
 - **"Tchau Jarvis"**, **"Desligar Jarvis"** ou **"Pode dormir"** encerram. **"Esqueça a conversa"** recomeça. **"Fica quieto"** só cala. Ctrl+C também encerra.
 - Ações perigosas (🔴) sempre pedem **"Confirma?"** por voz ou clique na HUD; veja [Segurança](#segurança-como-as-permissões-funcionam).
+- **Partida lenta?** No fim da partida o console mostra `[partida] total Xs: imports … · Whisper … · cérebro … · esperando a voz …`,
+  e a mesma linha fica em `data/logs/partida.log`. As fases da voz clonada (bibliotecas, modelo na GPU, molde da voz,
+  aquecimento) ficam em `data/logs/voz_clonada.log`. O molde da voz é calculado uma vez e guardado em
+  `referencia.wav.latentes.pt` (refeito sozinho se você trocar o áudio). Para não esperar nunca, use `--instalar-inicio`:
+  ele sobe junto com o Windows e já está pronto quando você precisar.
 
 ## Um Jarvis só (2026-10-17)
 - **A conversa não recomeça.** Toda conversa fica gravada no banco; quando um cérebro começa do zero (Jarvis reaberto,
@@ -290,7 +295,7 @@ Usa a acessibilidade do Windows (UI Automation), dentro do Jarvis, sem servidor 
 ## Memória (fase 3)
 - **A cada pedido** o Jarvis recebe seu perfil (sempre) + os 5 fatos mais relevantes ao que você disse + o resumo de um dia anterior, se tiver relação. Vai só na mensagem atual, então o cache do prompt continua valendo e a latência não sobe.
 - **Explícito:** "lembre que minha mãe se chama Maria" (`memorizar`), "esqueça que eu gosto de pizza" (`esquecer_fato`), "o que conversamos ontem?" (`lembrar`).
-- **Aprendizado sozinho (reflexão):** relê as conversas, extrai fatos (nome, família, trabalho, rotina, preferências, apelidos como "o painel = site X", correções), junta repetidos, **atualiza o que mudou** (mudou de cidade → substitui) e escreve um resumo do dia. Roda quando o Jarvis está ocioso: dias anteriores logo que ele abre; conversas de hoje depois de 15 min sem falar com ele. Se você chamar no meio, ela pausa.
+- **Aprendizado sozinho (reflexão):** relê as conversas, extrai fatos (nome, família, trabalho, rotina, preferências, apelidos como "o painel = site X", correções), junta repetidos, **atualiza o que mudou** (mudou de cidade → substitui) e escreve um resumo do dia. Roda quando o Jarvis está ocioso: com o **Qwen** como cérebro, dias anteriores logo que ele abre e conversas de hoje depois de 15 min sem falar com ele; com o **Claude**, só depois de 15 min sem conversa (contando da partida), porque ela sobe o Qwen na GPU e Qwen + voz clonada + Whisper não cabem em 8 GB. Se você chamar no meio, ela pausa.
 - **Ver e editar o que ele sabe:**
   ```
   .venv\Scripts\python.exe -m jarvis.memoria listar

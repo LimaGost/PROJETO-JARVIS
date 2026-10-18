@@ -1,10 +1,13 @@
-import argparse
-import queue
-import random
-import sys
-import threading
 import time
-import traceback
+
+T_PROCESSO = time.time()  # antes dos imports pesados: a partida mede também o tempo de carregar as bibliotecas
+
+import argparse  # noqa: E402
+import queue  # noqa: E402
+import random  # noqa: E402
+import sys  # noqa: E402
+import threading  # noqa: E402
+import traceback  # noqa: E402
 
 from jarvis.brain import avisos
 from jarvis.brain.comandos import identificar, sim_ou_nao
@@ -18,6 +21,34 @@ from jarvis.tools import apps
 from jarvis.tools.executor import Executor
 from jarvis.tools.todas import REGISTRO  # noqa: F401  (registra as ferramentas)
 
+class Cronometro:
+    """Tempo de cada etapa da partida, no console e em data/logs/partida.log, para saber onde ela demora."""
+
+    def __init__(self, inicio: float):
+        self.inicio = self.ultimo = inicio
+        self.etapas: list[tuple[str, float]] = []
+
+    def marca(self, nome: str):
+        agora = time.time()
+        self.etapas.append((nome, agora - self.ultimo))
+        self.ultimo = agora
+
+    def resumo(self) -> str:
+        partes = " · ".join(f"{n} {s:.1f}s" for n, s in self.etapas)
+        return f"total {self.ultimo - self.inicio:.1f}s: {partes}"
+
+    def gravar(self):
+        print(f"[partida] {self.resumo()}")
+        try:
+            pasta = RAIZ / "data" / "logs"
+            pasta.mkdir(parents=True, exist_ok=True)
+            with open(pasta / "partida.log", "a", encoding="utf-8") as f:
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {self.resumo()}\n")
+        except OSError:
+            pass
+
+
+CRONOMETRO = Cronometro(T_PROCESSO)
 ESPERA_OLLAMA_S = 120  # no boot do Windows o Ollama pode demorar a subir
 CHAMADOS = ("Pois não?", "Sim, {t}?", "Às ordens.", "Pois não, {t}?", "Estou aqui.")   # variar soa menos robótico
 
@@ -157,16 +188,23 @@ def modo_voz(cfg, silencioso: bool):
     ctl = Controle(cfg, None, ocupado=ocupado)
     bus.emitir("estado", estado="iniciando", detalhe="Carregando voz, audição e memória…")
     servidor, icone = iniciar_hud(cfg, ctl, silencioso)
+    cron = CRONOMETRO
+    cron.marca("HUD")
 
     print("Carregando módulos...")
     t = time.time()
-    ctl.voz = Voz(cfg)
+    ctl.voz = Voz(cfg)                       # a voz clonada sobe em outro processo, em paralelo com o resto
+    t_voz = time.time()
     ctl.ouvido = Ouvido(cfg)
+    cron.marca("Whisper")
     ctl.mic = mic = Microfone(cfg)
+    cron.marca("microfone")
     memoria, reflexao = criar_memoria(cfg, ocupado)
     ctl.memoria = memoria
+    cron.marca("memória")
     if reflexao:
-        reflexao.iniciar_zelador(aviso=lambda txt: bus.emitir("sistema", texto=txt.strip()))
+        reflexao.iniciar_zelador(aviso=lambda txt: bus.emitir("sistema", texto=txt.strip()),
+                                 exigir_ocio=lambda: getattr(ctl.cerebro, "atual", "qwen") != "qwen")
     executor = Executor(ctl.confirmar, caminho("data/logs"))
     executor.ao_comecar = ctl.reconhecer_acao      # resposta instantânea quando uma ação vai demorar
     avisos.ouvir(ctl.anunciar)                     # tarefas em segundo plano avisam por voz quando terminam
@@ -176,11 +214,17 @@ def modo_voz(cfg, silencioso: bool):
     bus.emitir("estado", estado="iniciando", detalhe="Carregando o modelo de linguagem…")
     aquecer_ou_sair(cerebro, cfg)
     ctl.enviar_cerebro()
+    cron.marca(f"cérebro ({cerebro.atual})")
     bus.emitir("estado", estado="iniciando", detalhe="Preparando o reconhecimento de voz…")
     ctl.ouvido.aquecer()
+    cron.marca("aquecer Whisper")
     bus.emitir("estado", estado="iniciando", detalhe="Preparando a voz…")
     if not ctl.voz.esperar_pronta(150):      # nunca fala com outra voz: espera a dele (carrega em paralelo, ~30 s)
         print("[tts] a voz ainda não ficou pronta; as primeiras respostas podem sair só em texto.")
+    cron.marca("esperando a voz")
+    print(f"[partida] a voz clonada levou {time.time() - t_voz:.1f}s para ficar pronta (em paralelo; detalhes em "
+          "data/logs/voz_clonada.log)")
+    cron.gravar()
     ctl.voz.memorizaveis = {f.format(t=tratamento) for f in CHAMADOS + Controle.RECONHECIMENTOS}
     print(f"Pronto em {time.time() - t:.1f}s. Diga 'Hey Jarvis'. Ctrl+C para sair.")
 
@@ -196,7 +240,7 @@ def modo_voz(cfg, silencioso: bool):
     falhas = 0
     try:
         while not ctl.encerrar.is_set():
-            if reflexao:
+            if reflexao and cerebro.atual == "qwen":   # com o Claude, quem decide é o zelador (espera o PC ocioso)
                 reflexao.em_segundo_plano(aviso=lambda txt: bus.emitir("sistema", texto=txt.strip()))
             try:
                 if not conversar(cfg, ctl, ocupado):
@@ -283,7 +327,8 @@ def modo_texto(cfg, falar: bool, silencioso: bool):
     memoria, reflexao = criar_memoria(cfg, ocupado)
     ctl.memoria = memoria
     if reflexao:
-        reflexao.iniciar_zelador(aviso=lambda txt: bus.emitir("sistema", texto=txt.strip()))
+        reflexao.iniciar_zelador(aviso=lambda txt: bus.emitir("sistema", texto=txt.strip()),
+                                 exigir_ocio=lambda: getattr(ctl.cerebro, "atual", "qwen") != "qwen")
     executor = Executor(ctl.confirmar, caminho("data/logs"))
     executor.ao_comecar = ctl.reconhecer_acao      # resposta instantânea quando uma ação vai demorar
     avisos.ouvir(ctl.anunciar)                     # tarefas em segundo plano avisam por voz quando terminam
@@ -371,7 +416,9 @@ def main():
         print(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} =====")
 
     cfg = carregar()
+    CRONOMETRO.marca("imports")
     precarregar(voz=not args.texto, falar=args.falar)
+    CRONOMETRO.marca("bibliotecas nativas")
     apps.carregar_em_segundo_plano()  # lista de apps do menu Iniciar (~1 s)
     if args.texto:
         modo_texto(cfg, args.falar, args.silencioso)

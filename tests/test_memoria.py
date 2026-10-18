@@ -327,3 +327,37 @@ def test_consolidador_aceita_keep_alive_dinamico(mem):
     papel["ka"] = "2m"
     c.perguntar("p", {})
     assert pedidos == [-1, "2m"]
+
+
+# ------------------------------------------------------------------ reflexão x GPU: com o Claude, só com o PC ocioso
+class _MemoriaParada:
+    def __init__(self, ultimo):
+        self.ultimo = ultimo
+
+    def ultimo_turno(self):
+        return self.ultimo
+
+
+def _reflexao_com(ultimo):
+    from jarvis.memoria.reflexao import Reflexao
+    r = Reflexao.__new__(Reflexao)
+    r.memoria = _MemoriaParada(ultimo)
+    return r
+
+
+def test_com_o_qwen_a_reflexao_roda_como_antes():
+    from datetime import datetime, timedelta
+    agora = datetime.now()
+    assert _reflexao_com(agora - timedelta(hours=2)).pode_rodar(900, agora, exigir_ocio=False) is True
+    assert _reflexao_com(agora).pode_rodar(900, agora, exigir_ocio=False) is False   # dias anteriores, já
+
+
+def test_com_o_claude_a_reflexao_espera_o_pc_ocioso_desde_a_partida():
+    from datetime import datetime, timedelta
+    agora = datetime.now()
+    ontem = agora - timedelta(days=1)
+    assert _reflexao_com(ontem).pode_rodar(900, agora, exigir_ocio=True) is None          # acabou de abrir
+    assert _reflexao_com(None).pode_rodar(900, agora, exigir_ocio=True) is None
+    assert _reflexao_com(ontem).pode_rodar(900, agora - timedelta(minutes=20), True) is True
+    conversou = agora - timedelta(minutes=3)
+    assert _reflexao_com(conversou).pode_rodar(900, agora - timedelta(hours=1), True) is None  # conversa recente

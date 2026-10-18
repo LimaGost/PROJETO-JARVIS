@@ -11,6 +11,9 @@ import queue
 import struct
 import sys
 import threading
+import time
+
+T0 = time.time()
 
 SAIDA = os.fdopen(os.dup(sys.stdout.fileno()), "wb", buffering=0)
 sys.stdout = sys.stderr
@@ -32,15 +35,44 @@ torchaudio.load = _carregar
 from TTS.api import TTS                 # noqa: E402
 
 
+def etapa(nome: str):
+    """Tempo desde o início do processo, no voz_clonada.log: mostra onde a partida da voz demora."""
+    print(f"[voz clonada] {time.strftime('%H:%M:%S')} {nome}: {time.time() - T0:.1f}s", file=sys.stderr, flush=True)
+
+
+def latentes(modelo, referencia: str, dispositivo: str):
+    """O "molde" da voz sai do áudio de referência. Calcular custa alguns segundos a cada partida, então fica
+    salvo ao lado do áudio e só é refeito se o arquivo de referência mudar."""
+    info = os.stat(referencia)
+    chave = f"{info.st_size}-{int(info.st_mtime)}"
+    cache = referencia + ".latentes.pt"
+    try:
+        dados = torch.load(cache, map_location=dispositivo, weights_only=True)
+        if dados.get("chave") == chave:
+            return dados["latente"], dados["embedding"]
+    except Exception:
+        pass   # sem cache ou cache de outra versão: calcula de novo
+    latente, embedding = modelo.get_conditioning_latents(audio_path=[referencia])
+    try:
+        torch.save({"chave": chave, "latente": latente.cpu(), "embedding": embedding.cpu()}, cache)
+    except Exception:
+        pass
+    return latente, embedding
+
+
 def enviar(id_: int, dados: bytes = b""):
     SAIDA.write(struct.pack("<II", id_, len(dados)) + dados)
 
 
 def main():
     referencia, velocidade, temperatura, dispositivo = sys.argv[1], float(sys.argv[2]), float(sys.argv[3]), sys.argv[4]
+    etapa("bibliotecas carregadas")
     tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(dispositivo)
     modelo = tts.synthesizer.tts_model
-    latente, embedding = modelo.get_conditioning_latents(audio_path=[referencia])
+    etapa("modelo XTTS na GPU")
+    latente, embedding = latentes(modelo, referencia, dispositivo)
+    latente, embedding = latente.to(dispositivo), embedding.to(dispositivo)
+    etapa("molde da voz")
     cancelar = threading.Event()
     pedidos: queue.Queue = queue.Queue()
 
@@ -73,6 +105,7 @@ def main():
             enviar(id_, pcm.tobytes())
 
     sintetizar("Sistemas prontos, senhor.", 0)    # esquenta os kernels da GPU (a 1ª frase leva ~1 minuto sem isso)
+    etapa("aquecimento (pronta)")
     cancelar.clear()
     enviar(0)                                     # id 0, tamanho 0 = pronto
     while True:
