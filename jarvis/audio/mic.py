@@ -1,4 +1,5 @@
 import queue
+import threading
 import time
 
 import numpy as np
@@ -19,6 +20,10 @@ class Microfone:
         self.max_fala_s = cfg["vad"]["max_fala_s"]
         self.limiar = cfg["wakeword"]["limiar"]
         self.fila: queue.Queue = queue.Queue()
+        self._ouvintes: list[queue.Queue] = []
+        self.nivel = 0.0
+        self.silenciado = False            # botão "mudo" da HUD: ignora o "Hey Jarvis"
+        self.encerrar = threading.Event()  # tira o programa do laço de espera (bandeja > Sair)
 
         self.wake = Model(
             wakeword_models=[caminho(cfg["wakeword"]["modelo"])],
@@ -36,7 +41,22 @@ class Microfone:
         )
 
     def _callback(self, dados, frames, tempo, status):
-        self.fila.put(dados[:, 0].copy())
+        bloco = dados[:, 0].copy()
+        # volume suavizado (0 a 1) para a HUD animar o reator enquanto você fala
+        rms = float(np.sqrt(np.mean(bloco.astype(np.float32) ** 2))) / 32768.0
+        self.nivel = max(rms * 6, self.nivel * 0.6)
+        self.fila.put(bloco)
+        for ouvinte in self._ouvintes:
+            ouvinte.put(bloco)
+
+    def assinar(self) -> queue.Queue:
+        """Uma cópia do áudio do microfone, para quem escuta em paralelo (ex.: interrupção enquanto ele fala)."""
+        q: queue.Queue = queue.Queue()
+        self._ouvintes = self._ouvintes + [q]
+        return q
+
+    def desassinar(self, q: queue.Queue):
+        self._ouvintes = [o for o in self._ouvintes if o is not q]
 
     def iniciar(self):
         self.stream.start()
@@ -61,17 +81,24 @@ class Microfone:
                 n += 1
         return n >= 2
 
-    def esperar_wakeword(self) -> None:
+    def esperar_wakeword(self) -> bool:
+        """Bloqueia até ouvir o chamado. Retorna False se mandaram encerrar."""
         self.limpar()
         self.wake.reset()
-        while True:
-            bloco = self.fila.get()
+        while not self.encerrar.is_set():
+            try:
+                bloco = self.fila.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            if self.silenciado:
+                continue
             scores = self.wake.predict(bloco)
             if max(scores.values()) >= self.limiar:
-                return
+                return True
+        return False
 
-    def gravar_fala(self, espera_inicio_s: float) -> np.ndarray | None:
-        """Grava até o silêncio. Retorna None se ninguém falou a tempo."""
+    def gravar_fala(self, espera_inicio_s: float, cancelar: threading.Event | None = None) -> np.ndarray | None:
+        """Grava até o silêncio. Retorna None se ninguém falou a tempo ou se `cancelar` foi acionado."""
         self.limpar()
         blocos: list[np.ndarray] = []
         pre: list[np.ndarray] = []  # um pouco antes da voz, para não cortar a primeira sílaba
@@ -81,7 +108,14 @@ class Microfone:
         dur_bloco = BLOCO / self.taxa
 
         while True:
-            bloco = self.fila.get()
+            try:
+                bloco = self.fila.get(timeout=0.1)
+            except queue.Empty:
+                if cancelar is not None and cancelar.is_set():
+                    return None
+                continue
+            if cancelar is not None and cancelar.is_set():
+                return None
             voz = self._tem_voz(bloco)
 
             if not falando:

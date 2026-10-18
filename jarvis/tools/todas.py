@@ -1,3 +1,4 @@
 """Importar este módulo registra todas as ferramentas em REGISTRO."""
-from jarvis.tools import apps, arquivos, calculo, memoria_tools, midia, shell, sistema, web  # noqa: F401
+from jarvis.tools import (apps, arquivos, calculo, interface, memoria_tools, midia, programador, shell,  # noqa: F401
+                          sistema, spotify, tela, uso, web)
 from jarvis.tools.base import REGISTRO  # noqa: F401

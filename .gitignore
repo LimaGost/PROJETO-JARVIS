@@ -5,4 +5,9 @@ __pycache__/
 data/voices/
 data/wakeword/
 data/memoria/
+data/spotify/
 data/logs/
+data/anthropic.key
+data/claude_cli/
+data/preferencias.json
+.venv-voz/

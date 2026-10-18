@@ -39,12 +39,72 @@ def sim_ou_nao(texto: str) -> bool:
     return any(p in PALAVRAS_SIM for p in palavras)
 
 
-def identificar(texto: str) -> str | None:
-    t = normalizar(texto)
-    if not t or len(t.split()) > MAX_PALAVRAS:
+# Trocar de mentalidade por voz. O Whisper escreve "Qwen" de muitos jeitos (quen, queen, kuen...) e "Claude" também.
+MAX_PALAVRAS_TROCA = 7
+VERBOS_TROCA = {"usa", "usar", "use", "muda", "mudar", "troca", "trocar", "volta", "voltar", "ativa", "ativar", "coloca",
+                "colocar", "passa", "passar", "modo", "mentalidade", "cerebro", "selecionar", "seleciona", "escolhe"}
+ALVO_QWEN = ("qwen", "quen", "queen", "kuen", "cuen", "quein")
+ALVO_CLAUDE = ("claude", "claudio", "clode", "cloud", "clod")
+ALVO_LOCAL = {"local", "offline"}
+
+
+def destino_cerebro(texto: str) -> str | None:
+    """'usa o claude' -> 'claude'; 'muda para o qwen' -> 'qwen'; senão None. Só frases curtas COM verbo de troca:
+    'o que é o claude?' é uma pergunta, não um comando."""
+    palavras = normalizar(texto).split()
+    if not palavras or len(palavras) > MAX_PALAVRAS_TROCA or not any(p in VERBOS_TROCA for p in palavras):
         return None
-    for nome, frases in COMANDOS.items():
-        for frase in frases:
-            if frase in t or SequenceMatcher(None, t, frase).ratio() >= SIMILARIDADE:
-                return nome
+    for p in palavras:
+        if p in VERBOS_TROCA or len(p) < 4:
+            continue
+        if any(SequenceMatcher(None, p, a).ratio() >= 0.72 for a in ALVO_QWEN) or p in ALVO_LOCAL:
+            return "qwen"
+        if any(SequenceMatcher(None, p, a).ratio() >= 0.72 for a in ALVO_CLAUDE):
+            return "claude"
+    return None
+
+
+# "Fica quieto": ele para de falar e NÃO responde nada (nem "ok"). Vale no meio da fala dele ou num pedido normal.
+SILENCIO = {
+    "quieto", "fica quieto", "fique quieto", "fica quietinho", "silencio", "fica em silencio", "fique em silencio",
+    "faz silencio", "cala a boca", "cala boca", "cala se", "calado", "fica calado", "fique calado", "para de falar",
+    "pare de falar", "para", "pare", "parar", "pode parar", "chega", "ja chega", "shh", "psiu", "xiu", "chiu",
+    "nao fala nada", "agora nao", "deixa", "deixa pra la", "deixa quieto", "esquece", "esquece isso", "cancela",
+    "nao precisa", "ta bom chega", "para tudo", "para com isso", "silencio por favor", "mudo",
+}
+_ENCHIMENTO = {"jarvis", "por", "favor", "ai", "ok", "okay", "ta", "bom", "ei", "hey", "e", "o", "agora", "senhor", "pfv", "porfavor"}
+_ENCHIMENTO_MANTER = {"ta bom chega", "agora nao", "silencio por favor"}  # enchimentos que fazem parte da frase
+
+
+def pedido_de_silencio(texto: str) -> bool:
+    """'Fica quieto, Jarvis!' / 'Para de falar.' / 'Shhh' -> True. 'Para onde vai o voo?' -> False (frase longa/pedido)."""
+    t = re.sub(r"\b(s+h+|x+i+u+|p+s+i+u+)\b", lambda m: "shh" if m.group(0)[0] == "s" else ("xiu" if m.group(0)[0] == "x" else "psiu"),
+               normalizar(texto))
+    if not t or len(t.split()) > 6:
+        return False
+    if t in SILENCIO or t in _ENCHIMENTO_MANTER:
+        return True
+    nucleo = " ".join(p for p in t.split() if p not in _ENCHIMENTO)
+    if not nucleo:
+        return False
+    if nucleo in SILENCIO:
+        return True
+    return len(nucleo.split()) >= 2 and any(SequenceMatcher(None, nucleo, f).ratio() >= 0.85 for f in SILENCIO if " " in f)
+
+
+def identificar(texto: str) -> str | None:
+    """'desligar' | 'esquecer' | 'calar' | 'trocar:qwen' | 'trocar:claude' | None"""
+    destino = destino_cerebro(texto)
+    if destino:
+        return f"trocar:{destino}"
+    t = normalizar(texto)
+    if not t:
+        return None
+    if pedido_de_silencio(texto):      # antes do "desligar": "para, Jarvis" é calar, não encerrar o programa
+        return "calar"
+    if len(t.split()) <= MAX_PALAVRAS:
+        for nome, frases in COMANDOS.items():
+            for frase in frases:
+                if frase in t or SequenceMatcher(None, t, frase).ratio() >= SIMILARIDADE:
+                    return nome
     return None

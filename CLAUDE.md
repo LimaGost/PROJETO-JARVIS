@@ -1,0 +1,21 @@
+# JARVIS: regras do projeto
+
+- **Pasta oficial: `D:\PROJETO JARVIS`.** Trabalhe, rode e teste somente aqui.
+- **Não abra, leia nem grave nada em `E:\`.** A cópia antiga em `E:\PROGRAMAÇÃO\Lumax\PROJETO JARVIS` está desatualizada, e o HD E: está falhando: cai com leitura pesada.
+- Usuário: Iury (Lima). Responda em português.
+
+## Rodar
+- Jarvis por voz: `iniciar.bat`. Modo texto: `texto.bat`.
+- Python do projeto: `.venv\Scripts\python.exe`. A voz clonada (XTTS-v2) roda num processo separado, com `.venv-voz\Scripts\python.exe`.
+- Testes: `.venv\Scripts\python.exe -m pytest -q`. Em 2026-10-18 passaram 669 testes (1 pulado).
+- Git e Node agora ficam em `C:\Users\iurys\AppData\Local\Programs\Git` e `...\nodejs` (antes estavam no E: e travavam o PC).
+
+## Armadilhas (detalhes no README)
+- Carregue numpy, onnxruntime e ctranslate2 na thread principal antes de criar qualquer thread (`precarregar` no `main.py`). Senão o Jarvis trava no Windows.
+- Chamadas ao Ollama: sempre `num_ctx: 6144` e `keep_alive: -1`. Senão ele recarrega o modelo (~15 s). Use o host `127.0.0.1`, nunca `localhost`.
+- A VRAM é de 8 GB. Qwen + Whisper + voz clonada não cabem juntos na GPU: com o Claude como cérebro, o Qwen só sobe quando precisa e sai em 2 min.
+- `ver_tela` e `mouse` (visão + mouse real) só vão para os cérebros Claude (`visao=True`); o mouse é 🟢 exceto janelas sensíveis e botões de risco.
+- O Iury quer um Jarvis só: nada de mostrar engrenagens na HUD (ações, modelo, mentalidade), nunca trocar de voz (só a clonada) e a conversa nunca recomeça sozinha (continuidade pelo banco, interrupção sem matar o `claude`).
+- `programar` põe o Claude Code (Sonnet) para trabalhar no projeto aberto no VS Code, em segundo plano, com arquivos + comandos (escolha do Iury), sem git push e fora do E:. Avisos de tarefas terminadas passam por `jarvis/brain/avisos.py`.
+- Os `__pycache__` de testes vieram do E: com caminhos de lá: se aparecer `E:\` num traceback, apague os `__pycache__` do projeto.
+- Chaves de API nunca vão no `config.yaml`. A HUD só escuta em 127.0.0.1.

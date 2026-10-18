@@ -11,6 +11,8 @@ from jarvis.brain.llm import _ALEGA_ACAO, _PROMETE_ACAO, _mentira
     "Aumento o volume, senhor.", "Aqui está. O volume foi reduzido para zero.", "Feito, senhor.",
     "O modo escuro foi ativado.", "Memorizei que seu time é o Palmeiras.", "Esqueci que você trabalha como analista.",
     "Anotei, senhor.", "Senhor Carlos, registro com prazer que sua esposa se chama Juliana.", "Está anotado.",
+    "Clicando em [17] para limpar a entrada.", "Abrindo o Spotify agora.", "Estou digitando o texto.",
+    "Estou abrindo a calculadora, senhor.", "Digitando a conta na calculadora.",
 ])
 def test_detecta_alegacao_de_acao(frase):
     assert _ALEGA_ACAO.search(frase)
@@ -31,6 +33,8 @@ def test_detecta_promessa(frase):
     "Vou bem, obrigado por perguntar.", "Sete vezes oito é cinquenta e seis, senhor.",
     "O Brasil foi descoberto em 1500.", "A Revolução Francesa começou em 1789.", "A cidade foi fundada em 1554.",
     "Sua filha se chama Sofia.", "Você mora em Campinas.", "Seu time é o Palmeiras.",
+    "Estou bem, obrigado.", "Estou aqui para ajudar.", "O resultado é cento e quarenta e quatro.",
+    "Chovendo bastante em Campinas hoje.", "A calculadora mostra 144.",
 ])
 def test_nao_dispara_em_conversa(frase):
     assert not _ALEGA_ACAO.search(frase) and not _PROMETE_ACAO.search(frase)

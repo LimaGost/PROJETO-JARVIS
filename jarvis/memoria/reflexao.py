@@ -124,11 +124,13 @@ class Consolidador:
         self.modelo = modelo
         # mesmo num_ctx do Jarvis: num_ctx diferente faz o Ollama recarregar o modelo (vários segundos)
         self.opcoes = {**opcoes, "temperature": 0}
+        # valor fixo ou função: com o Claude como cérebro, o Qwen da reflexão não pode ficar morando na GPU
         self.keep_alive = keep_alive
 
     def perguntar(self, prompt: str, esquema: dict) -> dict:
+        keep_alive = self.keep_alive() if callable(self.keep_alive) else self.keep_alive
         r = self.cliente.chat(model=self.modelo, messages=[{"role": "user", "content": prompt}], format=esquema,
-                              think=False, keep_alive=self.keep_alive, options=self.opcoes)
+                              think=False, keep_alive=keep_alive, options=self.opcoes)
         return json.loads(r.message.content)
 
     def consolidar(self, texto: str, categoria: str, origem: str) -> tuple[str, int | None]:

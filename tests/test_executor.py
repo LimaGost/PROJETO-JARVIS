@@ -7,7 +7,7 @@ from jarvis.tools.executor import BLOQUEADO_NO_TURNO, NEGADO, Executor
 def montar(tmp_path, respostas):
     executados, perguntas = [], []
 
-    def confirmar(resumo):
+    def confirmar(resumo, **_):
         perguntas.append(resumo)
         return respostas.pop(0)
 
@@ -59,7 +59,7 @@ def test_depois_de_negar_bloqueia_resto_do_turno_sem_perguntar(tmp_path):
     assert len(perguntas) == 1 and executados == []
     assert ex.executar("ler", {}) == "lido"  # ações livres continuam
     ex.novo_turno()
-    ex.confirmar = lambda r: True
+    ex.confirmar = lambda r, **_: True
     assert ex.executar("apagar", {}) == "apagado"
 
 

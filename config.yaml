@@ -1,13 +1,44 @@
 nome: Jarvis
 tratamento: senhor
 
-llm:
+cerebro:
+  # ollama     100% local, mais fraco
+  # claude     API da Anthropic (chave própria, cobrança por uso)
+  # claude-cli programa `claude` com a SUA ASSINATURA (sem chave). Zona cinza da política da Anthropic, veja o README
+  # Em qualquer motor Claude, o texto das conversas e do que as ferramentas leem vai para a Anthropic.
+  motor: claude-cli
+  reserva_local: true     # com motor Claude: se a internet, o login ou a cota falharem, o modelo local responde
+
+claude_cli:
+  modelo: sonnet          # apelidos do CLI: sonnet (rápido, gasta menos cota) | opus (mais capaz, gasta ~5x mais cota) | haiku
+  esforco: low            # low | medium | high: quanto ele "pensa". low = voz rápida
+  timeout_s: 120          # sem nenhum evento por este tempo, o processo é reiniciado
+  max_turnos_por_pedido: 30   # com o mouse, uma tarefa leva vários passos de ver e agir
+
+claude:
+  # a CHAVE nunca vai aqui (este arquivo vai para o git): variável ANTHROPIC_API_KEY ou o arquivo data/anthropic.key
+  modelo: claude-opus-5-5   # opções da família 5.x: claude-opus-5-5 (mais capaz) | claude-sonnet-5-5 (mais rápido e barato) | claude-haiku-5-5 (o mais barato)
+  esforco: low              # low | medium | high: quanto ele "pensa" antes de responder. low = voz rápida
+  max_tokens: 4096          # teto de raciocínio + resposta
+  max_turnos: 40            # pedidos lembrados na conversa atual (a memória de longo prazo é à parte)
+  max_rodadas: 20           # ações seguidas num mesmo pedido (ver a tela, clicar, conferir...)
+  timeout_s: 60
+
+llm:                        # modelo LOCAL: reserva do Claude, ou o cérebro inteiro com motor ollama; também faz a reflexão da memória
   modelo: qwen3:8b
   host: http://127.0.0.1:11434   # NÃO use "localhost": no Windows custa +2 s por pergunta (tenta IPv6 primeiro)
-  keep_alive: -1          # mantém o modelo na GPU
+  keep_alive: -1          # mantém o modelo na GPU (quando o Qwen é o cérebro)
+  keep_alive_reserva: 2m  # com o Claude como cérebro, o Qwen (reserva/reflexão) sai da GPU 2 min após o último uso
   max_turnos: 10          # quantas trocas lembrar na conversa atual
   contexto: 6144          # tokens. Só prompt + 20 ferramentas já usam ~2400; 8192 aperta a VRAM com o Whisper
   temperatura: 0.3        # mais baixa = escolhe ferramentas com mais consistência (0.6 errava mais)
+
+hud:
+  ativa: true
+  host: 127.0.0.1         # só esta máquina. Não troque por 0.0.0.0: a HUD pode confirmar ações perigosas
+  porta: 8765             # se estiver ocupada, usa a próxima livre
+  abrir_ao_iniciar: true  # abre a janela da HUD (Edge, modo aplicativo)
+  bandeja: true           # ícone na bandeja do Windows
 
 memoria:
   ativa: true
@@ -25,12 +56,13 @@ wakeword:
 
 vad:
   agressividade: 3        # 0 a 3 (3 = mais rígido com ruído; no seu microfone, 2 confundia ruído com voz)
-  silencio_ms: 900        # quanto silêncio encerra a sua fala
+  silencio_ms: 700        # quanto silêncio encerra a sua fala (cortando no meio de frases? volte para 900)
   espera_inicio_s: 5      # tempo para começar a falar depois do chamado
   max_fala_s: 20
 
 conversa:
-  janela_followup_s: 6    # depois de responder, escuta sem precisar do "Hey Jarvis"
+  janela_followup_s: 10   # depois de responder, escuta sem precisar do "Hey Jarvis" (conversa corrida)
+  janela_pergunta_s: 15   # se ele terminou com uma pergunta, espera mais a sua resposta
 
 stt:
   modelo: small           # tiny | base | small | medium
@@ -42,6 +74,25 @@ stt:
   vocabulario: "Conversa em português do Brasil com o assistente Jarvis. Discord, Spotify, WhatsApp, Chrome, Visual Studio Code, Microvix, OpenClaw, Ollama, Qwen, PowerShell."
   # large-v3-turbo é mais preciso, mas usa +450 MB de VRAM e sua GPU já está no limite
 
+interrupcao:                # você pode interromper enquanto ele pensa ou fala
+  ativa: true
+  por_voz: true             # falar por cima interrompe (false = só "Hey Jarvis" interrompe)
+  fator_eco: 3.0            # sua voz precisa estar X vezes acima do eco dele no microfone. Interrompendo sozinho? aumente (4-5)
+  min_ms: 320               # quanto tempo de voz contínua para contar como interrupção
+
 tts:
+  motor: clone            # clone = a voz do Jarvis (XTTS-v2, local) | piper = voz simples
+  reserva_piper: false    # false = nunca fala com outra voz: na partida espera a dele; se ela cair, espera voltar
+  clone:
+    python: .venv-voz/Scripts/python.exe   # ambiente separado (PyTorch)
+    referencia: data/voices/jarvis_ucm/referencia.wav
+    velocidade: 1.0       # 0.7 a 1.5
+    temperatura: 0.65     # menor = mais estável/monótona; maior = mais expressiva (e mais erros)
+    dispositivo: cuda     # cuda | cpu (cpu é lento demais para conversar)
+  # abaixo: voz Piper (reserva)
   voz: data/voices/pt_BR-faber-medium.onnx
-  velocidade: 1.0         # menor = mais rápido
+  velocidade: 1.12        # menor = mais rápido; >1 dá fala pausada e calma
+  tom: 0.92               # menor = voz mais grave (baritono sereno); 1.0 = original
+  variacao: 0.5           # menor = entonação mais plana e controlada
+  ritmo: 0.6              # menor = cadência mais regular
+
