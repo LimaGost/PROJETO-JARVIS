@@ -1,54 +1,59 @@
-# JARVIS: assistente de voz 100% local para Windows
+# JARVIS: assistente de voz pessoal para Windows
 
-Assistente pessoal que roda inteiro no seu computador, sem nuvem: você diz **"Hey Jarvis"**, ele ouve, lembra do que já sabe sobre você, pensa com um LLM local, **age no computador** (abre programas, mexe em arquivos, controla volume e mídia, pesquisa na web, roda PowerShell com segurança) e responde falando. Com o tempo, **aprende** com as conversas.
+Assistente que roda no seu computador: você diz **"Hey Jarvis"**, ele ouve, lembra do que já sabe sobre você, pensa, **age no computador** (abre programas, mexe em arquivos, controla volume, Spotify e mídia, pesquisa na web, enxerga a tela e usa o mouse, roda PowerShell com segurança, programa pelo VS Code) e responde falando com a voz dele. Com o tempo, **aprende** com as conversas.
 
-Fases concluídas: **1** (voz), **2** (controle do computador) e **3** (memória).
+Fases concluídas: **1** (voz), **2** (controle do computador), **3** (memória) e **4** (HUD).
 
 ```
-microfone → openWakeWord → webrtcvad → faster-whisper (GPU) → Qwen3 8B (Ollama) ⇄ ferramentas → Piper TTS → alto-falante
-                                                                   ↑      ↓              ↑
-                                         memória (SQLite + embeddinggemma na CPU)   permissões 🟢🟡🔴 + log
-                                                                   ↑
-                                                  reflexão: aprende com as conversas
+microfone → openWakeWord → webrtcvad → faster-whisper (GPU) → cérebro ⇄ 31 ferramentas → voz clonada (XTTS-v2) → alto-falante
+                                                               │   ↑            ↑
+                       claude-cli (assinatura) | Claude API | Qwen3 8B local    permissões 🟢🟡🔴 + log
+                                                               ↑
+                                     memória (SQLite + embeddinggemma na CPU) ← reflexão: aprende com as conversas
+                                                               ↓
+                                              HUD no navegador (127.0.0.1:8765) + ícone na bandeja
 ```
 
 | Etapa | Tecnologia | Onde está no código |
 |---|---|---|
 | Palavra de ativação | openWakeWord (`hey_jarvis`) | `jarvis/audio/mic.py` |
-| Detecção de fala | webrtcvad | `jarvis/audio/mic.py` |
+| Detecção de fala e interrupção | webrtcvad + detector de eco | `jarvis/audio/mic.py`, `jarvis/audio/interrupcao.py` |
 | Fala → texto | faster-whisper na GPU (CUDA) | `jarvis/audio/stt.py` |
-| Cérebro | Qwen3 8B via Ollama, com chamada de ferramentas | `jarvis/brain/llm.py` |
-| Comandos fixos (tchau, sim/não...) | regras em Python | `jarvis/brain/comandos.py` |
-| Ferramentas e permissões | Python + PowerShell | `jarvis/tools/` |
+| Cérebro (troca a qualquer hora) | `claude` CLI pela assinatura · API da Anthropic · Qwen3 8B no Ollama | `jarvis/brain/` (`claude_cli.py`, `claude.py`, `llm.py`, `seletor.py`) |
+| Ferramentas e permissões | Python + PowerShell + UI Automation do Windows | `jarvis/tools/` |
 | Memória e reflexão | SQLite + embeddings `embeddinggemma` | `jarvis/memoria/` |
-| Texto → fala | Piper (voz `pt_BR-faber-medium`) | `jarvis/audio/tts.py` |
+| Texto → fala | XTTS-v2 com voz clonada (Piper como alternativa) | `jarvis/audio/tts.py`, `clone.py`, `clone_worker.py` |
+| Interface | FastAPI + página web + bandeja (pystray) | `jarvis/hud/` |
 
 ### Estrutura
 ```
-main.py              ponto de entrada (modo voz e modo texto)
-config.yaml          todas as configurações (modelo, microfone, voz, limiares)
+main.py              ponto de entrada (voz, texto, HUD, início com o Windows)
+config.yaml          todas as configurações (cérebro, voz, microfone, HUD, limiares)
 iniciar.bat          atalho: modo voz
 texto.bat            atalho: modo texto
 jarvis/
-  audio/             microfone, wake word, Whisper e Piper
-  brain/             conversa com o LLM e comandos fixos
-  tools/             as 24 ferramentas, o executor de permissões e a análise de PowerShell
+  audio/             microfone, wake word, interrupção, Whisper, voz clonada e Piper
+  brain/             cérebros (Claude CLI/API, Qwen), seletor de mentalidade, comandos fixos, avisos
+  hud/               servidor local, página web, bandeja e início com o Windows
+  tools/             as ferramentas, o executor de permissões e a análise de PowerShell
   memoria/           banco, embeddings, reflexão e CLI (python -m jarvis.memoria)
 tests/               testes com pytest
-data/                modelos baixados, banco de memória e logs (fora do git)
+data/                modelos baixados, voz, memória, tokens e logs (fora do git)
 ```
 
 ## Requisitos
-- **Windows 10/11** (o controle do computador usa APIs do Windows, PowerShell, pycaw e as pastas do usuário).
+- **Windows 10/11** com o **Microsoft Edge** (a HUD abre nele como janela de aplicativo).
 - **Python 3.11 ou mais novo, 64 bits.**
-- **GPU NVIDIA com ~8 GB de VRAM** (testado numa RTX 3050 8 GB) e driver atualizado. As bibliotecas CUDA (cuBLAS/cuDNN) vêm pelo `pip`; não precisa instalar o CUDA Toolkit.
-- **[Ollama](https://ollama.com/download)** instalado.
-- Microfone e alto-falante.
+- **GPU NVIDIA com ~8 GB de VRAM** (testado numa RTX 3050 8 GB) e driver atualizado. As bibliotecas CUDA vêm pelo `pip`; não precisa do CUDA Toolkit.
+- **[Ollama](https://ollama.com/download)**: necessário mesmo com o Claude como cérebro (embeddings da memória, reflexão e reserva local).
+- **[Claude Code](https://code.claude.com)** instalado e logado, para o cérebro padrão (`cerebro.motor: claude-cli`) e para a ferramenta `programar`. Sem ele, use `motor: ollama` (100% local) ou `motor: claude` (chave de API).
+- Microfone e alto-falante (fone de ouvido funciona melhor para interromper por voz).
+- Opcional: **Spotify Premium** para tocar músicas pelo nome.
 
 ## Instalação
 Tudo a partir da pasta do projeto, no PowerShell.
 
-**1. Ambiente Python e dependências**
+**1. Ambiente principal e dependências**
 ```powershell
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install --upgrade pip
@@ -56,13 +61,20 @@ python -m venv .venv
 ```
 `requirements.txt` tem a lista sem versões fixas, caso queira atualizar os pacotes.
 
-**2. Modelos do Ollama** (o do LLM e o de embeddings da memória)
+**2. Modelos do Ollama** (LLM local e embeddings da memória)
 ```powershell
 ollama pull qwen3:8b
 ollama pull embeddinggemma
 ```
 
-**3. Modelos de wake word** em `data/wakeword/` (da [release do openWakeWord](https://github.com/dscripka/openWakeWord/releases/tag/v0.5.1)):
+**3. Login do Claude Code** (se for usar `motor: claude-cli`)
+```powershell
+claude            # na primeira vez, faça o login com a sua assinatura
+claude auth status
+```
+Para a API em vez da assinatura, salve a chave em `data/anthropic.key` (uma linha) e use `cerebro.motor: claude`. Detalhes em [Cérebro Claude por API](#cérebro-claude-por-api-alternativa).
+
+**4. Modelos de wake word** em `data/wakeword/` (da [release do openWakeWord](https://github.com/dscripka/openWakeWord/releases/tag/v0.5.1)):
 ```powershell
 mkdir data\wakeword -Force
 $base = "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1"
@@ -71,37 +83,168 @@ foreach ($m in "hey_jarvis_v0.1.onnx", "melspectrogram.onnx", "embedding_model.o
 }
 ```
 
-**4. Voz do Piper** em `data/voices/` (precisa do `.onnx` e do `.onnx.json`):
+**5. Voz do Jarvis (XTTS-v2, padrão `tts.motor: clone`)**: roda num ambiente separado, `.venv-voz`, com PyTorch.
+```powershell
+python -m venv .venv-voz
+.venv-voz\Scripts\python.exe -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+.venv-voz\Scripts\python.exe -m pip install coqui-tts soundfile numpy
+```
+Coloque um áudio de referência limpo da voz (de 6 a 30 s, `.wav`) em `data/voices/jarvis_ucm/referencia.wav`. O modelo XTTS-v2 (~1,8 GB) é baixado na primeira vez que a voz sobe. A licença do XTTS-v2 (CPML) é só para **uso não comercial**.
+
+**6. Voz Piper (alternativa leve, `tts.motor: piper`)** em `data/voices/` (precisa do `.onnx` e do `.onnx.json`):
 ```powershell
 .venv\Scripts\python.exe -m piper.download_voices pt_BR-faber-medium --download-dir data\voices
 ```
-Ou baixe os dois arquivos manualmente em [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices/tree/main/pt/pt_BR/faber/medium).
+Ou baixe os dois arquivos em [rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices/tree/main/pt/pt_BR/faber/medium).
 
-**5. Modelo do Whisper:** não precisa fazer nada; o `faster-whisper` baixa o modelo `small` sozinho na primeira execução.
+**7. Spotify (opcional)**: autorize uma vez; o token fica em `data/spotify/token.json`.
+```powershell
+.venv\Scripts\python.exe -m jarvis.tools.spotify
+```
 
-Ao final, a pasta `data/` deve ter:
+O modelo do Whisper (`small`) é baixado sozinho na primeira execução. Ao final, a pasta `data/` deve ter:
 ```
 data/wakeword/hey_jarvis_v0.1.onnx
 data/wakeword/melspectrogram.onnx
 data/wakeword/embedding_model.onnx
-data/voices/pt_BR-faber-medium.onnx
-data/voices/pt_BR-faber-medium.onnx.json
+data/voices/jarvis_ucm/referencia.wav          (voz clonada)
+data/voices/pt_BR-faber-medium.onnx(.json)     (só se usar o Piper)
 ```
-Os bancos e logs (`data/memoria/`, `data/logs/`) são criados automaticamente.
+Memória, logs e preferências (`data/memoria/`, `data/logs/`, `data/preferencias.json`) são criados automaticamente.
 
 ## Como rodar
-O **Ollama precisa estar aberto** (ícone na bandeja ou `ollama serve`). Se não estiver, o Jarvis avisa e encerra.
+O **Ollama precisa estar aberto** (ícone na bandeja ou `ollama serve`). Na partida o Jarvis espera até 2 min por ele; depois disso avisa e encerra.
 
 | Modo | Atalho | Comando |
 |---|---|---|
-| Voz (completo) | dois cliques em `iniciar.bat` | `.venv\Scripts\python.exe main.py` |
+| Voz (completo, com HUD) | dois cliques em `iniciar.bat` | `.venv\Scripts\python.exe main.py` |
 | Texto (sem microfone nem Whisper) | dois cliques em `texto.bat` | `.venv\Scripts\python.exe main.py --texto` |
 | Texto, respondendo em voz | `texto.bat --falar` | `.venv\Scripts\python.exe main.py --texto --falar` |
+| Sem abrir a janela da HUD | | `.venv\Scripts\python.exe main.py --silencioso` |
+| Iniciar junto com o Windows | | `.venv\Scripts\python.exe main.py --instalar-inicio` (desfaz com `--remover-inicio`) |
 
-- **Voz:** espere "Sistemas online", diga **"Hey Jarvis"**, espere o "Pois não?" e fale. Depois da resposta há 6 s para continuar sem repetir o chamado.
-- **Texto:** digite em vez de falar. Bom para testar sem GPU para o Whisper ou sem microfone.
-- **"Tchau Jarvis"**, **"Desligar Jarvis"** ou **"Pode dormir"** encerram. **"Esqueça a conversa"** recomeça. Ctrl+C também encerra.
-- Ações perigosas (🔴) sempre pedem **"Confirma?"** antes de executar; veja [Segurança](#segurança-como-as-permissões-funcionam).
+- **Voz:** espere "Sistemas online" (a voz clonada leva ~30 s para ficar pronta), diga **"Hey Jarvis"**, espere o chamado e fale. Depois da resposta há 10 s para continuar sem repetir o chamado.
+- **HUD:** abre sozinha em **http://127.0.0.1:8765** (ou na próxima porta livre; veja a linha "HUD em ..." no console). Dá para digitar pedidos, ver a conversa e a memória, e usar **PARAR TUDO** (Esc) e Mudo.
+- **"Tchau Jarvis"**, **"Desligar Jarvis"** ou **"Pode dormir"** encerram. **"Esqueça a conversa"** recomeça. **"Fica quieto"** só cala. Ctrl+C também encerra.
+- Ações perigosas (🔴) sempre pedem **"Confirma?"** por voz ou clique na HUD; veja [Segurança](#segurança-como-as-permissões-funcionam).
+
+## Um Jarvis só (2026-10-17)
+- **A conversa não recomeça.** Toda conversa fica gravada no banco; quando um cérebro começa do zero (Jarvis reaberto,
+  processo do `claude` reiniciado, reserva local assumindo, troca de mentalidade), o primeiro pedido leva os últimos
+  pedidos das últimas 12 h e ele continua de onde parou. Só "esqueça a conversa" corta essa continuidade.
+- **Interromper não derruba a conversa:** falar por cima ou "parar tudo" interrompe só o pedido em andamento
+  (`control_request interrupt` do `claude`); o processo e o contexto continuam. Antes o processo era morto.
+- **A HUD mostra o Jarvis, não as engrenagens:** sem painel de ações, de mentalidade, de permissões, chip do modelo
+  e botão "Nova conversa". Ficam o núcleo, a conversa, o sistema, a memória, Mudo e Parar. A autorização 🔴 continua.
+- **Uma voz só:** a do Jarvis (XTTS). Na partida ele espera ela ficar pronta antes de falar; se ela cair, espera voltar
+  (`tts.reserva_piper: false`). Erros do processo da voz ficam em `data/logs/voz_clonada.log`.
+- **Fala emendada:** cada frase é pedida à voz no momento em que o cérebro a escreve, então a próxima já está pronta
+  quando a atual acaba. Medido: 0 silêncios entre 4 frases (antes, 3 pausas somando 1,5 s).
+- **Conversa corrida:** depois de responder ele escuta por 10 s sem precisar do "Hey Jarvis" (`conversa.janela_followup_s`).
+
+## Programar pelo Jarvis (`programar`, `tarefa_programacao`, `vscode`)
+"Jarvis, cria uma página de login", "corrige esse erro", "roda os testes": o pedido vai para o **Claude Code** (Sonnet,
+pela assinatura), que trabalha na pasta do projeto aberto no VS Code (título da janela + pastas que o VS Code guarda em
+`storage.json`) ou na pasta dita no pedido.
+- Pede autorização 🔴 **uma vez por tarefa** e responde na hora; o trabalho roda em segundo plano. Quando acaba, ele
+  **avisa por voz** (sem atropelar a conversa), abre no VS Code os arquivos alterados e o cérebro fica sabendo.
+- Pode ler, criar e editar arquivos e rodar comandos (testes, npm, python, git), só na pasta do projeto. Sem `git push`,
+  `git reset --hard`, `rm -rf`, sem os seus MCPs (Gmail, Hostinger...) e sem web. Recusa raiz do disco, pasta do
+  usuário, pastas do Windows e o HD E:. Limite de 20 min por tarefa; uma tarefa por vez.
+- Pedidos seguidos no mesmo projeto (em até 2 h) continuam a mesma sessão: "agora muda a cor do botão".
+- Medido: criar uma calculadora com teste e rodar levou 54 s; o ajuste seguinte, na mesma sessão, 12 s.
+- "Como está a tarefa?" / "cancela a programação" usam `tarefa_programacao`. "O que está aberto no VS Code?" usa `vscode`.
+
+## Conversa natural
+- Prompt de conversa: ele participa, comenta e devolve perguntas quando você só quer conversar; ordens ele confirma curto.
+- **Resposta instantânea:** se uma ação vai demorar e ele ainda não disse nada, fala na hora "Já cuido disso, senhor"
+  (uma vez por pedido; não nas ações instantâneas nem quando vai pedir autorização).
+- O chamado varia ("Pois não?", "Sim, senhor?", "Às ordens."...) e as frases curtas repetidas saem da memória, sem gerar de novo.
+- Fim da fala detectado em 0,7 s (`vad.silencio_ms`); se ele terminar com uma pergunta, espera sua resposta por 15 s.
+
+## Uso da assinatura (claude-cli)
+Cada pedido fica em `data/logs/uso_claude_cli.jsonl` (tokens e custo equivalente em preço de API). Pergunte a ele:
+"quanto eu usei do Claude hoje?" (ferramenta `uso_claude`: hoje, últimas 5 h ou semana). Medido com o Sonnet:
+pedido simples ~9 mil tokens lidos do cache (~US$ 0,003 equivalente); com uma ferramenta ~18 mil (~US$ 0,005);
+com um print da tela ~US$ 0,01. Na assinatura nada disso é cobrado à parte: conta para o limite de uso dela.
+
+## Calar e interromper
+- **"Fica quieto"**, "para de falar", "silêncio", "chega", "para, Jarvis", "shh"…: ele para de falar e de fazer, **não responde nada**
+  e volta a esperar o "Hey Jarvis". ("Tchau, Jarvis" continua sendo desligar.)
+- **Falar por cima**: enquanto ele pensa ou fala, o microfone continua ouvindo. Se for a sua voz, ele pausa na hora,
+  ouve a sua frase e responde a ela (o pedido anterior é cancelado). Se era só o eco dele no microfone, retoma do ponto exato.
+- **"Hey Jarvis" no meio da fala** sempre interrompe.
+- Ajustes em `interrupcao:` no `config.yaml`. Se ele se interromper sozinho (alto-falante alto perto do microfone), suba `fator_eco`
+  para 4–5, ou use `por_voz: false` (aí só o "Hey Jarvis" interrompe). Com fone de ouvido funciona melhor.
+
+## Trocar a mentalidade (Qwen ⇄ Claude), a qualquer hora
+Dois jeitos, sem reiniciar: por voz/texto ("usa o Claude", "muda para o Qwen", "volta pro local") ou o `cerebro.motor`
+do `config.yaml` (só a escolha inicial). O painel da HUD foi tirado (2026-10-17): para o usuário, é um Jarvis só.
+- A escolha fica salva em `data/preferencias.json` (ignorado pelo git) e vale na próxima vez que ligar.
+- A troca espera o pedido atual acabar, sobe e testa a nova mentalidade **antes** de largar a antiga; se falhar, continua na atual e avisa.
+- A conversa continua ao trocar (a nova mentalidade recebe a conversa recente); a memória de longo prazo é a mesma.
+- Opções: **Qwen local** (grátis, privado), **Claude · assinatura** (CLI) e **Claude · API** (só aparece disponível com a chave em `data/anthropic.key`).
+- Ao sair do Claude, o processo `claude` é encerrado (não fica gastando nada).
+
+## Cérebro `claude-cli` (a sua assinatura, sem chave) — o motor ativo
+`cerebro.motor: claude-cli` roda o programa `claude` (Claude Code) por trás, com o login da sua assinatura (hoje: Claude Pro). Ele é só o "pensador": as 31 ferramentas continuam sendo do JARVIS e passam pelo Executor (🟢🟡🔴, confirmação, bloqueio da HUD, log).
+
+```
+JARVIS ──stream-json──► claude (processo persistente) ──MCP stdio──► ponte_mcp.py ──HTTP local + token──► Executor do JARVIS
+```
+- **Isolamento fail-closed.** O processo sobe com `--restricted --strict-mcp-config --tools "" --disable-slash-commands`. O evento `init` é conferido: se aparecer **qualquer** ferramenta que não seja `mcp__jarvis__*`, servidor MCP seu (Gmail, Supabase, Hostinger...), skill ou plugin externo, o JARVIS **recusa usar o cérebro e cai no modelo local**. Testado ao vivo: pedir "use o Bash" ou "leia meu Gmail" não funciona.
+- A chave de API (`ANTHROPIC_API_KEY`) é removida do ambiente do processo: o uso é da assinatura.
+- Modelo em `claude_cli.modelo`: `sonnet` (padrão, rápido e gasta menos cota), `opus` (mais capaz, gasta ~5x mais cota), `haiku`. `claude_cli.esforco: low` mantém a voz rápida.
+- Medido: partida ~2 s; respostas de 2 a 4 s; ~8 s quando há duas ferramentas encadeadas.
+- Se o login cair, a cota acabar ou a internet falhar **antes de ele falar**, o modelo local responde aquele pedido (`cerebro.reserva_local`).
+- "Parar tudo" e falar por cima só interrompem o pedido; queda do processo reinicia o `claude`, que recebe a conversa recente do banco.
+- A cota da assinatura é **compartilhada com o OpenClaw e com o seu uso no Claude**. Um assistente de voz faz muitas chamadas.
+- ⚠️ **Zona cinza da política.** A [política da Anthropic](https://code.claude.com/docs/en/legal-and-compliance) diz que o login por assinatura é para "uso ordinário" do Claude Code e apps nativos, e que quem constrói ferramentas deve usar chave de API; permite que um usuário entre no `claude` original com a própria assinatura, e proíbe rotear a assinatura para terceiros ou intermediar credenciais. Este uso é pessoal, com o `claude` sem modificação, mas **não é garantido ser permitido** e a Anthropic pode agir sem aviso. Para sair dessa zona: `cerebro.motor: claude` (chave de API).
+- Para voltar ao modelo local: `cerebro.motor: ollama`.
+
+## Cérebro Claude por API (alternativa)
+O modelo local de 8B é o gargalo (erra instruções simples, inventa resultados). Dá para trocar o cérebro pelo **Claude (API da Anthropic)** sem mudar mais nada: ferramentas, permissões 🟢🟡🔴, bloqueio da HUD, confirmação e memória continuam no seu computador. Se a internet ou a chave falharem, o modelo local assume (`cerebro.reserva_local`).
+
+**Ativar:**
+1. Crie uma chave em console.anthropic.com (é separada da assinatura do Claude/Claude Code, com cobrança por uso).
+2. Salve a chave em `data/anthropic.key` (uma linha, fora do git) **ou** na variável de ambiente `ANTHROPIC_API_KEY`. Nunca no `config.yaml`.
+3. No `config.yaml`: `cerebro.motor: claude`. Modelo em `claude.modelo`: `claude-opus-5-5` (mais capaz), `claude-sonnet-5-5` (mais rápido e barato) ou `claude-haiku-5-5` (o mais barato). `claude.esforco: low` mantém a voz rápida.
+4. Reinicie o Jarvis. O chip no topo da HUD mostra o modelo em uso.
+
+**Custo:** cada pedido envia ~5 mil tokens (prompt + 31 ferramentas), que ficam em cache (leitura ~10% do preço). Cada resposta é registrada em `data/logs/uso_claude.jsonl` (entrada, saída, cache lido/escrito) para você acompanhar.
+
+**Privacidade:** com `motor: claude`, o texto das conversas, os fatos da memória que entram no pedido e o conteúdo de janelas/arquivos lidos pelas ferramentas vão para a Anthropic. Para 100% local, `motor: ollama`.
+
+**Para quem mexer no código:** o histórico enviado é somente-acréscimo (o contexto fica dentro da mensagem do usuário) e usa `prefix_mismatch_behavior: drop_block`; ferramentas e prompt de sistema têm de ser idênticos em todo pedido (cache); nunca `tool_choice` forçado (400 nestes modelos).
+
+## HUD (fase 4)
+Abre sozinha como janela de aplicativo (Edge) em **http://127.0.0.1:8765** (se a porta estiver ocupada, usa a próxima: veja a linha "HUD em ..." no console).
+Reator animado que reage à sua voz e à dele, conversa ao vivo, painel de memória (filtrar e esquecer), CPU/RAM/GPU/VRAM, caixa de texto, **PARAR TUDO** (Esc) e Mudo. As ações continuam registradas em `data/logs/acoes.jsonl`, só não aparecem na tela.
+- **Confirmação 🔴 por voz ou por clique**, o que vier primeiro. O botão Confirmar só libera após 0,7 s; pedido digitado na HUD nunca abre o microfone.
+- **Segurança:** só `127.0.0.1`, token + checagem de Host/Origin + CSP; todo texto de modelo/site/arquivo entra como texto puro. **Nunca** mude `hud.host` para `0.0.0.0`.
+- **Bandeja do Windows** (abrir HUD, mudo, parar tudo, sair). **Início com o PC:** `python main.py --instalar-inicio` (atalho só com ícone na bandeja) e `--remover-inicio`.
+- `--silencioso` não abre a janela. `JARVIS_SEM_JANELA=1` desliga janela e bandeja (testes).
+
+## Visão e mouse de verdade (`ver_tela`, `mouse`): só com o Claude como cérebro
+O Jarvis tira um print da tela (`ver_tela`), o Claude enxerga a imagem e usa o mouse (`mouse`: mover, clicar, duplo clique,
+botão direito, arrastar, rolar) em qualquer programa, site ou jogo. Depois de cada ação volta um print novo para ele conferir.
+- Coordenadas em pixels da última imagem; o código converte para a tela real (2 monitores, escala do Windows). Sem `ver_tela`
+  recente (2 min, mesmo pedido) não há clique.
+- **Autonomia (escolha de 2026-10-17):** o mouse anda e clica sozinho (🟢). Pede confirmação 🔴 só onde o `clicar` já pede:
+  janelas sensíveis (terminal, Registro, UAC, banco, senhas) e botões de risco (excluir, enviar, pagar, instalar, **fechar**...),
+  detectados pelo que está debaixo do ponto (acessibilidade do Windows + `WM_NCHITTEST` para o X de apps Electron).
+  A HUD continua intocável. Ao contrário do `clicar`, o mouse não passa a pedir confirmação depois de ler um site.
+- O Qwen local não recebe essas duas ferramentas (não enxerga imagem). Cada print custa ~1.500 tokens da cota.
+- Testado ao vivo: o Claude calculou 7 + 8 na Calculadora só com o mouse em 10 s.
+
+## Controle de qualquer programa (`ver_janela`, `clicar`, `digitar`, `atalho`, `focar_janela`, `rolar`)
+Usa a acessibilidade do Windows (UI Automation), dentro do Jarvis, sem servidor externo. O nível é decidido pelo **contexto**, não pelo clique:
+- **A HUD do Jarvis é intocável** (senão ele clicaria no "Confirmar" dela e se autorizaria).
+- 🔴 em terminais, Registro, UAC, janelas de banco/pagamento/senhas; em botões de risco (excluir, enviar, pagar, instalar, **fechar**, sair...); em atalhos como Win+R, Alt+F4, Ctrl+Alt+Del.
+- Os números de `ver_janela` expiram a cada pedido e em 2 min. Depois de agir, a ferramenta devolve **o que a janela mostra** (o modelo já inventou "deu 1023" depois de clicar errado).
+- Janela de navegador/e-mail/chat/documento = texto de terceiros: marcado como não confiável e as ações seguintes pedem confirmação.
+- **Limite do modelo de 8B:** `digitar` no teclado ("12*12=") é confiável; clicar traduzindo números em nomes de botão ("Um, Dois") erra. O prompt orienta o teclado.
+- Opt-in ao vivo: `JARVIS_TESTE_UI=1 pytest tests/test_interface.py` opera a Calculadora de verdade.
 
 ## Memória (fase 3)
 - **A cada pedido** o Jarvis recebe seu perfil (sempre) + os 5 fatos mais relevantes ao que você disse + o resumo de um dia anterior, se tiver relação. Vai só na mensagem atual, então o cache do prompt continua valendo e a latência não sobe.
@@ -117,7 +260,7 @@ O **Ollama precisa estar aberto** (ícone na bandeja ou `ollama serve`). Se não
 - **Proteções:** só o que **você** disse vira fato (conteúdo de sites e arquivos não entra na reflexão); `memorizar`/`esquecer_fato` são 🟡, então depois de ler um site ou arquivo pedem confirmação; senhas, cartões e CPF nunca são guardados; "esquecer" apaga de verdade.
 - Tudo fica em `data/memoria/jarvis.db` (fora do git). `JARVIS_MEMORIA=outro.db` usa outro banco (testes).
 
-## O que ele faz (24 ferramentas)
+## O que ele faz (31 ferramentas + `ver_tela` e `mouse` com o Claude)
 | Área | Ferramentas | Nível |
 |---|---|---|
 | Informação | `hora_data`, `info_sistema` (CPU, RAM, discos, GPU e temperatura, IP local), `listar_janelas`, `calcular` | 🟢 |
@@ -156,6 +299,9 @@ O **Ollama precisa estar aberto** (ícone na bandeja ou `ollama serve`). Se não
 | Quer mais precisão e aceita +450 MB de VRAM | `stt.modelo: large-v3-turbo`, `stt.tipo: int8_float16` |
 
 ## Armadilhas já resolvidas (não desfazer)
+- **Carregar bibliotecas nativas (numpy, onnxruntime, ctranslate2) ANTES de criar qualquer thread** (`precarregar` em `main.py`): no Windows, criar thread durante o carregamento de uma DLL trava o processo. A HUD criava threads e pendurava o Jarvis no `import numpy`.
+- **Nunca chame o Ollama sem `num_ctx` e `keep_alive` iguais aos do Jarvis** (6144 / -1): qualquer diferença descarrega e recarrega o modelo (~15 s) e troca o "Forever" por 5 min.
+- Janelas somem entre a listagem e a leitura (`COMError`): a enumeração de janelas é tolerante a isso.
 - **`llm.host` precisa ser `127.0.0.1`**, nunca `localhost`: no Windows isso custa +2 s por pergunta (tenta IPv6 primeiro).
 - **Caminho com acento** (`PROGRAMAÇÃO`) quebra o espeak do Piper; `tts.py` copia os dados para `C:\ProgramData\jarvis_espeak`.
 - **Modelo fixo e prompt aquecido** (`keep_alive: -1`, `Cerebro.aquecer` com as ferramentas), senão a 1ª pergunta paga segundos.
@@ -165,19 +311,24 @@ O **Ollama precisa estar aberto** (ícone na bandeja ou `ollama serve`). Se não
 - **Reflexão usa o mesmo `num_ctx` do Jarvis**: num_ctx diferente faz o Ollama recarregar o modelo.
 - **Consolidação de fatos não confia só no modelo:** fatos de categorias incompatíveis nunca se fundem; "substitui" usa a frase nova (o modelo misturava "mora em Valinhos. mora em Campinas."); juntar que perde nome/número/site é recusado.
 - VRAM com tudo carregado: ~7,5 de 8,2 GB. Feche apps pesados de GPU antes de usar.
+- **Com o Claude como cérebro, o Qwen não mora na GPU** (`llm.keep_alive_reserva: 2m`): ele só sobe se o Claude falhar ou
+  para a reflexão da memória, e sai 2 min depois. Antes ficava carregado para sempre junto com a voz clonada e o Whisper,
+  estourava os 8 GB, o Windows jogava o excesso para a RAM e o PC travava.
+- **As ferramentas rodam em threads** (ponte do claude-cli): a UI Automation precisa de `InitializeUIAutomationInCurrentThread`
+  em cada uma (`interface._exigir`).
 
 ## Testes
 ```
 .venv\Scripts\python.exe -m pytest tests -q
 ```
-239 testes: guarda do PowerShell (incluindo tentativas de burla), arquivos, executor/permissões, comandos de voz, sim/não, calculadora, detector de ações inventadas e memória (banco, segredos, consolidação, reflexão, ferramentas).
+669 testes: programar pelo VS Code, resposta instantânea e avisos, voz única e fala emendada, continuidade da conversa, uso da assinatura, visão e mouse (coordenadas, travas, imagem chegando ao Claude), calar e interromper (comandos, detector de eco, escuta em paralelo), seletor de mentalidade (voz, escolha, troca com falha segura, persistência), claude-cli (isolamento, ponte HTTP e MCP, processo com `claude` falso, reserva), cérebro Claude por API, HUD (autenticação, confirmação por voz/clique, parar tudo), controle de interface, guarda do PowerShell (incluindo tentativas de burla), arquivos, executor/permissões, comandos de voz, sim/não, calculadora, detector de ações inventadas e memória (banco, segredos, consolidação, reflexão, ferramentas).
 
-## Medidas (RTX 3050 8 GB)
+## Medidas (RTX 3050 8 GB, com o Qwen local)
+Com o `claude-cli` os tempos estão na seção do [cérebro `claude-cli`](#cérebro-claude-cli-a-sua-assinatura-sem-chave--o-motor-ativo).
 - Conversa: transcrição ~0,4 s · 1ª frase ~0,35 s (já com a busca na memória, ~30 ms) · LLM 37 tokens/s.
 - Com ferramenta: ~1,35 s em média até a resposta (duas chamadas ao modelo); pesquisa web ~3,5 s.
 - Escolha da ferramenta certa: 47/47 pedidos em português, em duas rodadas seguidas, sem nenhuma ação inventada.
 - Reflexão de um dia de conversa: ~15 s.
 
 ## Próximas fases
-4. Interface HUD web
-5. Visão de tela + proatividade (lembretes, alertas)
+5. Proatividade (lembretes, alertas). A HUD (fase 4) e a visão de tela (`ver_tela`) já estão prontas.

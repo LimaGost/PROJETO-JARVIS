@@ -34,7 +34,13 @@ class Ferramenta:
     obrigatorios: tuple = ()
     avaliar: Callable[[dict], Avaliacao] | None = None
     nivel_fixo: Nivel = Nivel.LIVRE
-    externo: bool = False  # devolve conteúdo de terceiros (arquivo, site), que pode conter injeção de instruções
+    # devolve conteúdo de terceiros (arquivo, site), que pode conter injeção de instruções. Pode ser uma função
+    # (args -> bool) quando depende do resultado, ex.: ver_janela de um navegador sim, da Calculadora não.
+    externo: "bool | Callable[[dict], bool]" = False
+    visao: bool = False   # devolve imagem: só vai para cérebros que enxergam (Claude), não para o Qwen local
+
+    def e_externo(self, args: dict) -> bool:
+        return bool(self.externo(args)) if callable(self.externo) else bool(self.externo)
 
     def avaliacao(self, args: dict) -> Avaliacao:
         if self.avaliar:
@@ -57,16 +63,27 @@ class Ferramenta:
 
 
 REGISTRO: dict[str, Ferramenta] = {}
+AO_NOVO_PEDIDO: list[Callable[[], None]] = []  # ferramentas com estado (ex.: números de elementos) se limpam aqui
 
 
 def ferramenta(nome: str, descricao: str, parametros: dict | None = None, obrigatorios=(),
-               nivel: Nivel = Nivel.LIVRE, avaliar: Callable[[dict], Avaliacao] | None = None, externo: bool = False):
+               nivel: Nivel = Nivel.LIVRE, avaliar: Callable[[dict], Avaliacao] | None = None, externo: bool = False,
+               visao: bool = False):
     """Decorador: registra a função como ferramenta disponível para o Jarvis."""
     def registrar(func):
         REGISTRO[nome] = Ferramenta(nome, descricao, func, parametros or {}, tuple(obrigatorios), avaliar, nivel,
-                                    externo)
+                                    externo, visao)
         return func
     return registrar
+
+
+class ComImagem(str):
+    """Resultado de texto que leva junto uma imagem (base64). Quem só entende texto usa a string normalmente."""
+
+    def __new__(cls, texto: str, imagem_b64: str, tipo: str = "image/jpeg"):
+        obj = super().__new__(cls, texto)
+        obj.imagem, obj.tipo = imagem_b64, tipo
+        return obj
 
 
 def conteudo_externo(origem: str, texto: str) -> str:

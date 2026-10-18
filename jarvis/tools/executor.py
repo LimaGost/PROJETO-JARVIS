@@ -5,7 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from jarvis.tools.base import REGISTRO, Avaliacao, ErroFerramenta, Ferramenta, Nivel
+from jarvis.hud.bus import bus
+from jarvis.tools.base import AO_NOVO_PEDIDO, REGISTRO, Avaliacao, ComImagem, ErroFerramenta, Ferramenta, Nivel
 
 MAX_RESULTADO = 1500  # caracteres devolvidos ao LLM (o contexto do modelo é pequeno)
 
@@ -19,7 +20,7 @@ TURNOS_CONTAMINADO = 3  # pedidos em que o conteúdo externo lido ainda está na
 class Executor:
     def __init__(self, confirmar: Callable[[str], bool], pasta_logs: str,
                  registro: dict[str, Ferramenta] | None = None, avisar: Callable[[str], None] | None = None):
-        """confirmar(resumo) -> True só se o usuário disse sim. avisar(texto) mostra detalhes na tela."""
+        """confirmar(resumo, nome=, args=) -> True só se o usuário disse sim. avisar(texto) mostra detalhes na tela."""
         self.registro = REGISTRO if registro is None else registro
         self.confirmar = confirmar
         self.avisar = avisar or print
@@ -27,14 +28,19 @@ class Executor:
         self.log = Path(pasta_logs) / "acoes.jsonl"
         self._negou_no_turno = False
         self._turno = 0
+        self._aid = 0  # número da ação, para a HUD ligar "executando" ao resultado
         self._contaminado_ate = -1  # último turno em que conteúdo externo ainda pode influenciar o modelo
+        self.ao_comecar: Callable[[str, str], None] | None = None  # (nome, nível): a ação vai começar agora
 
-    def schemas(self) -> list[dict]:
-        return [f.schema() for f in self.registro.values()]
+    def schemas(self, visao: bool = False) -> list[dict]:
+        """visao=False (Qwen local): sem as ferramentas que devolvem imagem, que ele não enxerga."""
+        return [f.schema() for f in self.registro.values() if visao or not f.visao]
 
     def novo_turno(self):
         self._negou_no_turno = False
         self._turno += 1
+        for limpar in AO_NOVO_PEDIDO:
+            limpar()
 
     def esquecer(self):
         """A conversa foi apagada: o conteúdo externo lido saiu da memória do modelo."""
@@ -45,6 +51,7 @@ class Executor:
         return self._turno <= self._contaminado_ate
 
     def executar(self, nome: str, args: dict | None) -> str:
+        self._aid += 1
         ferramenta = self.registro.get(nome)
         if ferramenta is None:
             return f"Erro: a ferramenta '{nome}' não existe."
@@ -72,31 +79,46 @@ class Executor:
                 return BLOQUEADO_NO_TURNO
             # o resumo falado é curto; na tela vai o pedido completo, para conferir antes de dizer sim
             self.avisar(f"  🔴 pedindo confirmação: {nome} {json.dumps(args, ensure_ascii=False)}")
-            if not self.confirmar(avaliacao.resumo):
+            bus.emitir("acao", id=self._aid, nome=nome, args=args, nivel="CONFIRMAR", status="aguardando",
+                       resumo=avaliacao.resumo)
+            if not self.confirmar(avaliacao.resumo, nome=nome, args=args):
                 self._negou_no_turno = True
                 self._registrar(nome, args, avaliacao, "negado", "")
                 return NEGADO
 
+        bus.emitir("acao", id=self._aid, nome=nome, args=args, nivel=avaliacao.nivel.name, status="executando",
+                   resumo=avaliacao.resumo)
+        if self.ao_comecar:
+            try:
+                self.ao_comecar(nome, avaliacao.nivel.name)   # resposta instantânea ("já cuido disso, senhor")
+            except Exception:
+                pass
         t = time.time()
+        imagem = None
         try:
-            resultado = str(ferramenta.funcao(**args))
+            bruto = ferramenta.funcao(**args)
+            imagem = (bruto.imagem, bruto.tipo) if isinstance(bruto, ComImagem) else None
+            resultado = str(bruto)
             status = "ok"
         except ErroFerramenta as e:
             resultado, status = f"Erro: {e}", "erro"
         except Exception as e:
             resultado, status = f"Erro inesperado: {type(e).__name__}: {e}", "erro"
 
-        if ferramenta.externo and status == "ok":
+        if status == "ok" and ferramenta.e_externo(args):
             self._contaminado_ate = self._turno + TURNOS_CONTAMINADO - 1
         if len(resultado) > MAX_RESULTADO:
             resultado = resultado[:MAX_RESULTADO] + "\n[...resultado cortado]"
         self._registrar(nome, args, avaliacao, status, resultado, time.time() - t)
-        return resultado
+        return ComImagem(resultado, *imagem) if imagem else resultado
 
     def _registrar(self, nome, args, avaliacao, status, resultado, duracao=0.0):
         nivel = avaliacao.nivel.name if avaliacao else "?"
         icone = {"LIVRE": "🟢", "REGISTRADO": "🟡", "CONFIRMAR": "🔴"}.get(nivel, "⚪")
         self.avisar(f"  {icone} {nome} {json.dumps(args, ensure_ascii=False)[:160]} -> {status}")
+        bus.emitir("acao", id=self._aid, nome=nome, args=args, nivel=nivel, status=status,
+                   resumo=avaliacao.resumo if avaliacao else None, resultado=resultado[:600],
+                   duracao=round(duracao, 2))
         registro = {
             "quando": datetime.now().isoformat(timespec="seconds"),
             "ferramenta": nome,

@@ -7,7 +7,7 @@ import re
 import sqlite3
 import threading
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -56,6 +56,7 @@ class Memoria:
         self._db = sqlite3.connect(caminho, check_same_thread=False)
         self._db.executescript(_ESQUEMA)
         self._indice = None  # (ids, matriz) dos fatos, recarregado após escrita
+        self.marco_conversa: datetime | None = None  # "esqueça a conversa": a continuidade não volta antes disto
 
     # ------------------------------------------------------------ fatos
     def adicionar_fato(self, texto: str, categoria: str = "outro", origem: str = "conversa") -> int | None:
@@ -202,6 +203,18 @@ class Memoria:
             else:
                 self._db.execute("UPDATE turnos SET refletido=1 WHERE substr(quando, 1, 10)=? AND id<=?", (dia, ate_id))
             self._db.commit()
+
+    def turnos_recentes(self, n: int = 8, horas: float = 12, desde: datetime | None = None) -> list[tuple[str, str, str]]:
+        """Últimos (quando, usuário, jarvis) das últimas `horas`, do mais antigo ao mais novo. `desde` corta antes
+        de um 'esqueça a conversa'."""
+        limite = datetime.now() - timedelta(hours=horas)
+        if desde and desde > limite:
+            limite = desde
+        with self._lock:
+            linhas = self._db.execute(
+                "SELECT quando, usuario, jarvis FROM turnos WHERE quando > ? ORDER BY id DESC LIMIT ?",
+                (limite.isoformat(timespec="seconds"), n)).fetchall()
+        return list(reversed(linhas))
 
     def ultimo_turno(self) -> datetime | None:
         with self._lock:
