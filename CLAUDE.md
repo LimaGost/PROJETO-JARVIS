@@ -19,4 +19,5 @@
 - `programar` põe o Claude Code (Sonnet) para trabalhar no projeto aberto no VS Code, em segundo plano, com arquivos + comandos (escolha do Iury), sem git push e fora do E:. Avisos de tarefas terminadas passam por `jarvis/brain/avisos.py`.
 - Os `__pycache__` de testes vieram do E: com caminhos de lá: se aparecer `E:\` num traceback, apague os `__pycache__` do projeto.
 - Gmail, Agenda e WhatsApp (`gmail.py`, `agenda.py`, `whatsapp.py`, login em `google_api.py`) são `so_claude=True`: o Qwen não recebe. Enviar e-mail e WhatsApp é sempre 🔴 (escolha do Iury); não há ferramenta de apagar e-mail.
+- Base de conhecimento (o que ele ESTUDA) é separada da memória sobre o Iury: `jarvis/memoria/conhecimento.py` + `jarvis/tools/conhecimento.py`, banco em `data/conhecimento/`. Leitura de páginas/PDF/docx em `jarvis/tools/leitura.py`, que bloqueia a rede local. Ferramentas `so_claude` podem devolver até 12 mil caracteres (`MAX_RESULTADO_CLAUDE`); as do Qwen, 1.500.
 - Chaves de API nunca vão no `config.yaml`. A HUD só escuta em 127.0.0.1.

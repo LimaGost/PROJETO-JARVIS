@@ -5,7 +5,7 @@ Assistente que roda no seu computador: você diz **"Hey Jarvis"**, ele ouve, lem
 Fases concluídas: **1** (voz), **2** (controle do computador), **3** (memória) e **4** (HUD).
 
 ```
-microfone → openWakeWord → webrtcvad → faster-whisper (GPU) → cérebro ⇄ 37 ferramentas → voz clonada (XTTS-v2) → alto-falante
+microfone → openWakeWord → webrtcvad → faster-whisper (GPU) → cérebro ⇄ 42 ferramentas → voz clonada (XTTS-v2) → alto-falante
                                                                │   ↑            ↑
                        claude-cli (assinatura) | Claude API | Qwen3 8B local    permissões 🟢🟡🔴 + log
                                                                ↑
@@ -170,6 +170,30 @@ O **Ollama precisa estar aberto** (ícone na bandeja ou `ollama serve`). Na part
   quando a atual acaba. Medido: 0 silêncios entre 4 frases (antes, 3 pausas somando 1,5 s).
 - **Conversa corrida:** depois de responder ele escuta por 10 s sem precisar do "Hey Jarvis" (`conversa.janela_followup_s`).
 
+## Ler e estudar: a base de conhecimento (só com o Claude como cérebro)
+"Lê esse link pra mim", "estuda esse manual do Microvix", "aprende esse PDF". Depois: "como emito nota no Microvix?"
+e ele responde **a partir do que estudou**, dizendo de qual documento veio.
+
+**Como o Jarvis sabe das coisas (três camadas):**
+| Camada | O que é | Onde fica |
+|---|---|---|
+| O que o Claude já sabe | conhecimento geral do modelo (programação, ciência, idiomas...) | no modelo |
+| Memória sobre você | fatos da sua vida, preferências, correções, resumos dos dias | `data/memoria/jarvis.db` |
+| **Base de conhecimento** | o que você mandou ele **estudar**: manuais, páginas, PDFs, contratos | `data/conhecimento/conhecimento.db` |
+
+- **Como ele "aprende" um documento:** `aprender` lê o texto, divide em trechos de ~1.000 caracteres (com sobreposição) e
+  guarda cada trecho com um vetor de significado (`embeddinggemma`, local, na CPU). Numa pergunta, os trechos de
+  significado mais próximo voltam para o Claude ler antes de responder: é estudar com o livro aberto do lado, não
+  "treinar" o modelo (isso não dá para fazer num PC, e nem precisa). Estudar de novo a mesma fonte atualiza.
+- **O que ele lê:** páginas da internet, PDFs (com texto; PDF escaneado precisaria de OCR), Google Docs/Planilhas
+  **públicos**, e arquivos do PC (`txt`, `md`, `pdf`, `docx`, `csv`, código). Páginas que exigem login não.
+- **Ferramentas:** `ler_documento` (lê em partes de 6 mil caracteres), `aprender`, `consultar_conhecimento`,
+  `listar_conhecimento` (🟢) e `esquecer_conhecimento` (🟡). Cada pedido ao Claude leva a lista do que já foi estudado,
+  para ele saber quando consultar.
+- **Segurança:** o texto lido é de terceiros e entra marcado como não confiável (depois de ler, ações 🟡 pedem
+  confirmação). Ele **nunca** acessa endereços da rede local (127.0.0.1, 192.168..., roteador), nem por redirecionamento.
+- O banco é só seu e fica fora do git. Para ver o que tem: "o que você já estudou?".
+
 ## Gmail, Agenda e WhatsApp (só com o Claude como cérebro)
 "Tenho e-mail novo?", "lê o e-mail da Ana", "responde que eu confirmo", "o que tenho amanhã?", "marca dentista
 sexta às 15h", "manda no WhatsApp pra Maria que eu chego às 8". Configuração no passo 8 da instalação.
@@ -241,7 +265,7 @@ Três jeitos, sem reiniciar:
 - Ao sair do Claude, o processo `claude` é encerrado (não fica gastando nada).
 
 ## Cérebro `claude-cli` (a sua assinatura, sem chave) — o motor ativo
-`cerebro.motor: claude-cli` roda o programa `claude` (Claude Code) por trás, com o login da sua assinatura (hoje: Claude Pro). Ele é só o "pensador": as 37 ferramentas continuam sendo do JARVIS e passam pelo Executor (🟢🟡🔴, confirmação, bloqueio da HUD, log).
+`cerebro.motor: claude-cli` roda o programa `claude` (Claude Code) por trás, com o login da sua assinatura (hoje: Claude Pro). Ele é só o "pensador": as 42 ferramentas continuam sendo do JARVIS e passam pelo Executor (🟢🟡🔴, confirmação, bloqueio da HUD, log).
 
 ```
 JARVIS ──stream-json──► claude (processo persistente) ──MCP stdio──► ponte_mcp.py ──HTTP local + token──► Executor do JARVIS
@@ -265,7 +289,7 @@ O modelo local de 8B é o gargalo (erra instruções simples, inventa resultados
 3. No `config.yaml`: `cerebro.motor: claude`. Modelo em `claude.modelo`: `claude-opus-5-5` (mais capaz), `claude-sonnet-5-5` (mais rápido e barato) ou `claude-haiku-5-5` (o mais barato). `claude.esforco: low` mantém a voz rápida.
 4. Reinicie o Jarvis. O chip no topo da HUD mostra o modelo em uso.
 
-**Custo:** cada pedido envia ~5 mil tokens (prompt + 37 ferramentas), que ficam em cache (leitura ~10% do preço). Cada resposta é registrada em `data/logs/uso_claude.jsonl` (entrada, saída, cache lido/escrito) para você acompanhar.
+**Custo:** cada pedido envia ~5 mil tokens (prompt + 42 ferramentas), que ficam em cache (leitura ~10% do preço). Cada resposta é registrada em `data/logs/uso_claude.jsonl` (entrada, saída, cache lido/escrito) para você acompanhar.
 
 **Privacidade:** com `motor: claude`, o texto das conversas, os fatos da memória que entram no pedido e o conteúdo de janelas/arquivos lidos pelas ferramentas vão para a Anthropic. Para 100% local, `motor: ollama`.
 

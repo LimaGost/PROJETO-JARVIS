@@ -8,7 +8,8 @@ from typing import Callable
 from jarvis.hud.bus import bus
 from jarvis.tools.base import AO_NOVO_PEDIDO, REGISTRO, Avaliacao, ComImagem, ErroFerramenta, Ferramenta, Nivel
 
-MAX_RESULTADO = 1500  # caracteres devolvidos ao LLM (o contexto do modelo é pequeno)
+MAX_RESULTADO = 1500  # caracteres devolvidos ao LLM (o contexto do Qwen é pequeno)
+MAX_RESULTADO_CLAUDE = 12000  # ferramentas só do Claude (ler documento, e-mail, conhecimento): ele lê páginas inteiras
 
 NEGADO = ("O usuário NÃO autorizou esta ação. Ela não foi executada. "
           "Não tente fazer o mesmo por outra ferramenta; apenas avise que cancelou.")
@@ -107,8 +108,9 @@ class Executor:
 
         if status == "ok" and ferramenta.e_externo(args):
             self._contaminado_ate = self._turno + TURNOS_CONTAMINADO - 1
-        if len(resultado) > MAX_RESULTADO:
-            resultado = resultado[:MAX_RESULTADO] + "\n[...resultado cortado]"
+        limite = MAX_RESULTADO_CLAUDE if ferramenta.so_claude else MAX_RESULTADO
+        if len(resultado) > limite:
+            resultado = resultado[:limite] + "\n[...resultado cortado]"
         self._registrar(nome, args, avaliacao, status, resultado, time.time() - t)
         return ComImagem(resultado, *imagem) if imagem else resultado
 

@@ -14,6 +14,7 @@ pycaw
 comtypes
 ddgs
 send2trash
+pypdf
 # fase 4: HUD e controle de interface
 fastapi
 uvicorn[standard]

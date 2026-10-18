@@ -60,6 +60,7 @@ def _turno_real(msg: dict) -> bool:
 
 
 class CerebroClaude(Cerebro):
+    usa_conhecimento = True
     def __init__(self, cfg: dict, executor=None, memoria=None, cliente=None):
         super().__init__(cfg, executor, memoria)
         c = cfg.get("claude", {})

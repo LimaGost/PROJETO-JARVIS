@@ -11,9 +11,10 @@ def criar(cfg: dict, ocupado: threading.Event | None = None):
     """Monta memória + reflexão e liga as ferramentas de memória. Retorna (memoria, reflexao) ou (None, None).
     JARVIS_MEMORIA=<arquivo.db> usa outro banco (testes não sujam a memória real)."""
     from jarvis.memoria.banco import Memoria
+    from jarvis.memoria.conhecimento import Conhecimento
     from jarvis.memoria.embeddings import Embedder
     from jarvis.memoria.reflexao import Consolidador, Reflexao
-    from jarvis.tools import memoria_tools
+    from jarvis.tools import conhecimento, memoria_tools
 
     m = cfg.get("memoria", {})
     if not m.get("ativa", True):
@@ -25,6 +26,9 @@ def criar(cfg: dict, ocupado: threading.Event | None = None):
     consolidador = Consolidador(memoria, ollama.Client(host=host), llm["modelo"],
                                 {"num_ctx": llm.get("contexto", 4096)}, llm["keep_alive"])
     memoria_tools.ativar(memoria, consolidador)
+    # o que ele ESTUDA fica num banco à parte da memória sobre o usuário (mesmo modelo de embeddings, na CPU)
+    conhecimento.ativar(Conhecimento(os.environ.get("JARVIS_CONHECIMENTO")
+                                     or caminho(m.get("conhecimento", "data/conhecimento/conhecimento.db")), embedder))
     reflexao = Reflexao(memoria, consolidador, caminho("data/logs"), ocupado)
     threading.Thread(target=_aquecer, args=(embedder,), daemon=True).start()
     return memoria, reflexao

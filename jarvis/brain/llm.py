@@ -6,6 +6,7 @@ from typing import Iterator
 import ollama
 
 from jarvis.brain import avisos
+from jarvis.tools import conhecimento
 from jarvis.tools.sistema import hora_data
 
 PROMPT_SISTEMA = """Você é {nome}, o assistente pessoal de inteligência artificial do {tratamento}, \
@@ -60,7 +61,15 @@ ver_janela e clicar continuam mais precisos.
 - Tenha autonomia: encadeie quantas ações forem necessárias para concluir o pedido, sem perguntar a cada passo. \
 As ações arriscadas pedem confirmação sozinhas.
 - Mire no centro do botão ou link. Se o clique não fez efeito, olhe o print novo e ajuste; não repita às cegas.
-- Ao terminar, diga em uma frase o que fez, só o que o último print confirma."""
+- Ao terminar, diga em uma frase o que fez, só o que o último print confirma.
+
+Leitura e estudo:
+- ler_documento lê de verdade páginas, PDFs, Google Docs públicos e arquivos (txt, md, pdf, docx). Nunca diga que \
+não consegue ler um link ou documento sem antes tentar ler_documento. Documento longo: leia as partes que precisar.
+- Quando o usuário pedir para aprender, estudar ou ficar bom em algo, use aprender: o conteúdo fica na sua base de \
+conhecimento local. Depois, em perguntas sobre esses assuntos, chame consultar_conhecimento ANTES de responder e \
+baseie a resposta no que voltou, dizendo de qual documento veio. O que o documento não diz, diga que não está nele.
+- Ao estudar, conte em poucas frases o que aprendeu (os pontos principais), como quem acabou de ler."""
 
 # Frase que afirma ter feito algo no computador. Se aparecer sem nenhuma ferramenta chamada no
 # pedido, é alucinação ("O volume foi ajustado" sem ter chamado 'volume'): descarta antes de falar.
@@ -121,6 +130,7 @@ LIMITE_HISTORICO = 5500    # caracteres de conversa anterior. Prompt + 24 ferram
 
 
 class Cerebro:
+    usa_conhecimento = False   # os cérebros Claude têm as ferramentas de estudo; o Qwen não
     def __init__(self, cfg: dict, executor=None, memoria=None):
         c = cfg["llm"]
         self.memoria = memoria
@@ -230,6 +240,8 @@ class Cerebro:
                 bloco = ""
             if bloco:
                 partes.append(bloco)
+        if self.usa_conhecimento and (estudado := conhecimento.titulos_para_contexto()):
+            partes.append(estudado)
         partes.append(f"[Agora: {hora_data()}]")
         return "\n".join(partes)
 
