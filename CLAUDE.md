@@ -20,4 +20,5 @@
 - Os `__pycache__` de testes vieram do E: com caminhos de lá: se aparecer `E:\` num traceback, apague os `__pycache__` do projeto.
 - Gmail, Agenda e WhatsApp (`gmail.py`, `agenda.py`, `whatsapp.py`, login em `google_api.py`) são `so_claude=True`: o Qwen não recebe. Enviar e-mail e WhatsApp é sempre 🔴 (escolha do Iury); não há ferramenta de apagar e-mail.
 - Base de conhecimento (o que ele ESTUDA) é separada da memória sobre o Iury: `jarvis/memoria/conhecimento.py` + `jarvis/tools/conhecimento.py`, banco em `data/conhecimento/`. Leitura de páginas/PDF/docx em `jarvis/tools/leitura.py`, que bloqueia a rede local. Ferramentas `so_claude` podem devolver até 12 mil caracteres (`MAX_RESULTADO_CLAUDE`); as do Qwen, 1.500.
+- Dois motores de voz clonada, mesmo protocolo de processo: `clone_worker.py` (XTTS, `.venv-voz`, padrão) e `qwen3_worker.py` (Qwen3-TTS via faster-qwen3-tts, `.venv-qwen3`). Escolha em `tts.clone.modelo`; troque só depois de `python -m jarvis.diagnostico --so voz --comparar`. Continua valendo: uma voz só, nunca trocar sozinho de motor.
 - Chaves de API nunca vão no `config.yaml`. A HUD só escuta em 127.0.0.1.

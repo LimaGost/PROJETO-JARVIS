@@ -9,7 +9,7 @@
 
 Nada aqui mexe nos seus dados: memória e conhecimento são testados em bancos temporários, que são apagados no fim.
 Rode com o Jarvis FECHADO (a voz e o Whisper usam a mesma GPU). O relatório fica em data/logs/diagnostico.txt e
-a voz gerada em data/logs/diagnostico_voz.wav, para você ouvir.
+a voz gerada em data/logs/diagnostico_voz_<modelo>.wav, para você ouvir. --comparar testa XTTS e Qwen3-TTS.
 """
 import argparse
 import re
@@ -226,31 +226,38 @@ def _linha_do_tempo(chegadas: list[tuple[float, int]], taxa: int, reserva_s: flo
     return inicio, silencio, engasgos
 
 
-def testar_voz(cfg, r: Relatorio, ouvir: bool):
-    r.secao("Voz (voz clonada XTTS + conferência pelo Whisper)")
+def testar_voz(cfg, r: Relatorio, ouvir: bool, modelo: str | None = None) -> dict | None:
+    """Gera as frases de teste, mede e confere com o Whisper. Devolve as medidas (para --comparar)."""
+    import copy
+    t_cfg = copy.deepcopy(cfg["tts"])
+    if modelo:
+        t_cfg.setdefault("clone", {})["modelo"] = modelo
+    modelo = t_cfg.get("clone", {}).get("modelo", "xtts")
+    r.secao(f"Voz: {modelo} (voz clonada + conferência pelo Whisper)")
     from jarvis.audio.tts import TAXA_CLONE, dividir_frase
-    t_cfg = cfg["tts"]
     if t_cfg.get("motor") != "clone":
         r.item("voz clonada", None, "tts.motor não é 'clone'; pulando", "")
-        return
+        return None
     from jarvis.audio.clone import VozClonada
+    medidas = {"modelo": modelo}
     try:
         t = time.time()
         voz = VozClonada(t_cfg)
         pronta = voz.esperar_pronta(240)
         partida = time.time() - t
     except Exception as e:
-        r.item("voz clonada", False, f"não subiu ({e})", "confira .venv-voz e data/voices/jarvis_ucm/referencia.wav")
-        return
+        r.item(f"voz {modelo}", False, f"não subiu ({e})", "confira o ambiente da voz (README) e a referência")
+        return None
     if not pronta:
-        r.item("voz clonada", False, "não ficou pronta em 4 min", "veja data/logs/voz_clonada.log")
+        r.item(f"voz {modelo}", False, "não ficou pronta em 4 min", "veja data/logs/voz_clonada.log")
         voz.encerrar()
-        return
+        return None
+    medidas["partida"] = partida
     r.item("partida da voz", partida < 60 or None, f"pronta em {partida:.0f}s", "acima de 60 s: veja as fases em "
            "data/logs/voz_clonada.log")
     reserva = float(t_cfg.get("clone", {}).get("reserva_s", 1.2))
     maximo = int(t_cfg.get("clone", {}).get("max_trecho", 110))
-    audios, textos, piores = [], [], []
+    audios, textos, piores, inicios, velocidades = [], [], [], [], []
     try:
         for frase in FRASES_VOZ:
             for trecho in dividir_frase(frase, maximo):
@@ -265,6 +272,8 @@ def testar_voz(cfg, r: Relatorio, ouvir: bool):
                 duracao, geracao = len(audio) / TAXA_CLONE, chegadas[-1][0]
                 inicio, silencio, engasgos = _linha_do_tempo(chegadas, TAXA_CLONE, reserva)
                 piores.append((engasgos, silencio))
+                inicios.append(inicio)
+                velocidades.append(duracao / max(geracao, 1e-3))
                 r.info(f"\"{trecho[:50]}{'…' if len(trecho) > 50 else ''}\": {duracao:.1f}s de fala gerados em "
                        f"{geracao:.1f}s ({duracao / max(geracao, 1e-3):.1f}x o tempo real), 1º som em {inicio:.2f}s, "
                        f"engasgos previstos: {engasgos}")
@@ -273,15 +282,18 @@ def testar_voz(cfg, r: Relatorio, ouvir: bool):
     finally:
         voz.encerrar()
     if not audios:
-        return
+        return medidas
     engasgos = sum(e for e, _ in piores)
+    medidas.update(engasgos=engasgos, silencio=sum(s for _, s in piores), primeiro_som=max(inicios),
+                   velocidade=min(velocidades))
     silencio = sum(s for _, s in piores)
     r.item("fluidez", engasgos == 0 or (None if silencio < 0.5 else False),
            "sem engasgos previstos" if engasgos == 0 else f"{engasgos} engasgo(s), {silencio:.1f}s de silêncio no meio",
            "a GPU está gerando mais devagar que a fala: feche apps de GPU, use o Claude (não o Qwen) e/ou "
            "suba tts.clone.reserva_s para 2.0")
-    _gravar_wav(audios, TAXA_CLONE, PASTA_LOGS / "diagnostico_voz.wav")
-    r.info(f"áudio salvo em {PASTA_LOGS / 'diagnostico_voz.wav'} (ouça para julgar se parece o Jarvis)")
+    wav = PASTA_LOGS / f"diagnostico_voz_{modelo}.wav"
+    _gravar_wav(audios, TAXA_CLONE, wav)
+    r.info(f"áudio salvo em {wav} (ouça para julgar se parece o Jarvis)")
     if ouvir:
         try:
             import sounddevice as sd
@@ -290,7 +302,30 @@ def testar_voz(cfg, r: Relatorio, ouvir: bool):
             sd.wait()
         except Exception as e:
             r.item("tocar no alto-falante", False, str(e), "confira a saída de áudio do Windows")
-    _conferir_com_whisper(cfg, r, audios, textos)
+    medidas["nitidez"] = _conferir_com_whisper(cfg, r, audios, textos)
+    return medidas
+
+
+def comparar_vozes(cfg, r: Relatorio, ouvir: bool):
+    """Testa cada motor instalado com as mesmas frases e diz qual usar. Fluidez primeiro (voz fiel que trava não
+    serve para conversar); entre as fluidas, a mais nítida. Semelhança com o Jarvis: ouça os WAVs."""
+    from jarvis.audio.clone import MODELOS
+    resultados = [m for m in (testar_voz(cfg, r, ouvir, modelo) for modelo in MODELOS) if m and "engasgos" in m]
+    r.secao("Comparação das vozes")
+    if not resultados:
+        r.item("comparação", False, "nenhum motor de voz funcionou", "instale ao menos um (README, passo 5)")
+        return
+    for m in resultados:
+        r.info(f"{m['modelo']}: engasgos {m['engasgos']} ({m['silencio']:.1f}s), pior velocidade "
+               f"{m['velocidade']:.1f}x o tempo real, 1º som em até {m['primeiro_som']:.2f}s, "
+               f"nitidez {m['nitidez'] if m.get('nitidez') is not None else '?'}%, partida {m['partida']:.0f}s")
+    fluidas = [m for m in resultados if m["engasgos"] == 0] or sorted(resultados, key=lambda m: m["silencio"])[:1]
+    melhor = max(fluidas, key=lambda m: ((m.get("nitidez") or 0) >= 85, m["modelo"] == "qwen3", m.get("nitidez") or 0))
+    atual = cfg["tts"].get("clone", {}).get("modelo", "xtts")
+    dica = "" if melhor["modelo"] == atual else f"troque no config.yaml: tts.clone.modelo: {melhor['modelo']}"
+    r.item("voz recomendada", True if melhor["modelo"] == atual else None,
+           f"{melhor['modelo']} (fluida e mais nítida/fiel neste PC); hoje está {atual}", dica)
+    r.info("Antes de trocar, ouça data/logs/diagnostico_voz_*.wav: qual soa mais como o Jarvis?")
 
 
 def _gravar_wav(audios, taxa, destino: Path):
@@ -310,7 +345,7 @@ def _conferir_com_whisper(cfg, r: Relatorio, audios, textos):
         ouvido = Ouvido(cfg)
     except Exception as e:
         r.item("conferência pelo Whisper", None, f"Whisper não carregou ({type(e).__name__})", "")
-        return
+        return None
     total, acertos = 0, 0
     for audio, texto in zip(audios, textos):
         x24 = audio.astype(np.float32)
@@ -324,6 +359,7 @@ def _conferir_com_whisper(cfg, r: Relatorio, audios, textos):
     pct = 100 * acertos / max(total, 1)
     r.item("nitidez da fala", pct >= 85 or (None if pct >= 65 else False), f"{pct:.0f}% das palavras entendidas",
            "fala embolada: tente tts.clone.temperatura 0.55 e confira a referência (preparar_voz)")
+    return round(pct)
 
 
 def testar_acoes(cfg, r: Relatorio, abrir: bool, pasta: Path):
@@ -405,6 +441,7 @@ def main(argv=None):
     p.add_argument("--ouvir", action="store_true", help="tocar a voz gerada no alto-falante")
     p.add_argument("--abrir", action="store_true", help="abrir e fechar o Bloco de Notas de verdade")
     p.add_argument("--cerebro", action="store_true", help="fazer uma pergunta real ao Claude (gasta cota)")
+    p.add_argument("--comparar", action="store_true", help="testar XTTS e Qwen3-TTS e dizer qual usar")
     p.add_argument("--so", nargs="+", choices=PARTES, help="rodar só estas partes")
     p.add_argument("--url", default="https://pt.wikipedia.org/wiki/J.A.R.V.I.S.", help="página para testar a leitura")
     args = p.parse_args(argv)
@@ -417,7 +454,7 @@ def main(argv=None):
                   ("memoria", lambda: testar_memoria(cfg, r, pasta)),
                   ("aprendizado", lambda: testar_aprendizado(cfg, r, pasta)),
                   ("internet", lambda: testar_internet(cfg, r, args.url)),
-                  ("voz", lambda: testar_voz(cfg, r, args.ouvir)),
+                  ("voz", lambda: comparar_vozes(cfg, r, args.ouvir) if args.comparar else testar_voz(cfg, r, args.ouvir)),
                   ("acoes", lambda: testar_acoes(cfg, r, args.abrir, pasta)),
                   ("cerebro", lambda: testar_cerebro(cfg, r, pasta))]
         for nome, etapa in etapas:

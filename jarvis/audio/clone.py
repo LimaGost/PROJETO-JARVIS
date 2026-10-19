@@ -18,7 +18,9 @@ from jarvis.config import RAIZ, caminho
 
 TAXA = 24000
 LOG = RAIZ / "data" / "logs" / "voz_clonada.log"
-_WORKER = Path(__file__).with_name("clone_worker.py")
+_WORKER = Path(__file__).with_name("clone_worker.py")          # XTTS-v2
+_WORKER_QWEN3 = Path(__file__).with_name("qwen3_worker.py")    # Qwen3-TTS (mesmo protocolo)
+MODELOS = ("xtts", "qwen3")
 
 
 class ErroClone(RuntimeError):
@@ -28,13 +30,26 @@ class ErroClone(RuntimeError):
 class VozClonada:
     def __init__(self, cfg_tts: dict):
         c = cfg_tts["clone"]
-        self.python = Path(caminho(c.get("python", ".venv-voz/Scripts/python.exe")))
-        self.referencia = Path(caminho(c["referencia"]))
+        self.modelo = c.get("modelo", "xtts")
+        if self.modelo not in MODELOS:
+            raise ErroClone(f"tts.clone.modelo '{self.modelo}' desconhecido (use {' ou '.join(MODELOS)})")
+        if self.modelo == "qwen3":
+            q = c.get("qwen3", {}) or {}
+            self.worker = _WORKER_QWEN3
+            self.python = Path(caminho(q.get("python", ".venv-qwen3/Scripts/python.exe")))
+            self.referencia = Path(caminho(q.get("referencia", c["referencia"])))
+            extra = {"modelo": q.get("modelo", "Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
+                     "texto_referencia": q.get("texto_referencia", ""), "xvec_only": q.get("xvec_only", False),
+                     "pedaco": q.get("pedaco", 8), "idioma": q.get("idioma", "Portuguese")}
+        else:
+            self.worker = _WORKER
+            self.python = Path(caminho(c.get("python", ".venv-voz/Scripts/python.exe")))
+            self.referencia = Path(caminho(c["referencia"]))
+            extra = {k: c[k] for k in ("top_k", "top_p", "repeticao", "pedaco") if k in c}
         if not self.python.exists():
-            raise ErroClone(f"ambiente da voz não encontrado: {self.python}")
+            raise ErroClone(f"ambiente da voz ({self.modelo}) não encontrado: {self.python}")
         if not self.referencia.exists():
             raise ErroClone(f"áudio de referência não encontrado: {self.referencia}")
-        extra = {k: c[k] for k in ("top_k", "top_p", "repeticao", "pedaco") if k in c}
         self.args = [str(self.referencia), str(c.get("velocidade", 1.0)), str(c.get("temperatura", 0.65)),
                      c.get("dispositivo", "cuda"), json.dumps(extra)]
         self.pronto = threading.Event()
@@ -55,7 +70,7 @@ class VozClonada:
         except OSError:
             erros = subprocess.DEVNULL
         self._proc = subprocess.Popen(
-            [str(self.python), str(_WORKER), *self.args],
+            [str(self.python), str(self.worker), *self.args],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=erros,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )

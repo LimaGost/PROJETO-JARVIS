@@ -95,6 +95,24 @@ corta silêncio, encurta pausas longas e acerta o volume, e salva em `data/voice
 .venv\Scripts\python.exe -m jarvis.audio.preparar_voz "VOZ JARVIS UCM]\Gravando 2026-10-17 131614.mp4"
 ``` O modelo XTTS-v2 (~1,8 GB) é baixado na primeira vez que a voz sobe. A licença do XTTS-v2 (CPML) é só para **uso não comercial**.
 
+**5b. Voz Qwen3-TTS (opcional, mais fiel à referência, `tts.clone.modelo: qwen3`)**: ambiente próprio, `.venv-qwen3`.
+```powershell
+python -m venv .venv-qwen3
+.venv-qwen3\Scripts\python.exe -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+.venv-qwen3\Scripts\python.exe -m pip install faster-qwen3-tts==0.5.4
+```
+O modelo (`Qwen3-TTS-12Hz-1.7B-Base`, ~4 GB) é baixado na primeira vez. Ele usa a mesma referência do XTTS **mais a
+transcrição exata dela** (`tts.clone.qwen3.texto_referencia`, já preenchida com o texto do mp4). Depois compare:
+```powershell
+.venv\Scripts\python.exe -m jarvis.diagnostico --so voz --comparar --ouvir
+```
+O diagnóstico gera as mesmas frases com os dois, mede engasgos, nitidez (Whisper) e 1º som, salva
+`data/logs/diagnostico_voz_xtts.wav` e `..._qwen3.wav` e diz qual usar. **Por que existe:** num teste independente
+(RTX 4050, 1.620 falas) o Qwen3-TTS 1.7B foi o mais fiel à voz de referência (0,85 contra 0,64 do XTTS), com 1,2% de
+palavras erradas contra 10,6% e nenhuma palavra inventada; em troca usa ~5 GB de VRAM (contra ~2,7 GB) e só fala em
+tempo real com o `faster-qwen3-tts` (1,8x o tempo real numa RTX 4060; numa 3050 deve ficar perto do limite). Com ele,
+use o Claude como cérebro: o Qwen local não cabe junto na GPU.
+
 **6. Voz Piper (alternativa leve, `tts.motor: piper`)** em `data/voices/` (precisa do `.onnx` e do `.onnx.json`):
 ```powershell
 .venv\Scripts\python.exe -m piper.download_voices pt_BR-faber-medium --download-dir data\voices

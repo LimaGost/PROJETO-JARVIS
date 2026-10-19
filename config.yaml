@@ -84,8 +84,16 @@ tts:
   motor: clone            # clone = a voz do Jarvis (XTTS-v2, local) | piper = voz simples
   reserva_piper: false    # false = nunca fala com outra voz: na partida espera a dele; se ela cair, espera voltar
   clone:
-    python: .venv-voz/Scripts/python.exe   # ambiente separado (PyTorch)
+    modelo: xtts          # xtts (padrão, leve e rápido) | qwen3 (mais fiel à voz, ~5 GB de VRAM).
+                          # Troque para qwen3 só se o diagnóstico mandar: python -m jarvis.diagnostico --so voz --comparar
+    python: .venv-voz/Scripts/python.exe   # ambiente separado (PyTorch) do XTTS
     referencia: data/voices/jarvis_ucm/referencia.wav
+    qwen3:
+      python: .venv-qwen3/Scripts/python.exe   # ambiente próprio (bibliotecas mais novas que as do XTTS)
+      modelo: Qwen/Qwen3-TTS-12Hz-1.7B-Base    # 0.6B-Base = mais rápido, um pouco menos fiel
+      pedaco: 8                                # áudio por pedaço (8 = ~0,67 s). Engasgando? 12
+      # transcrição EXATA do áudio de referência (a amostra do mp4). Errada = voz pior; vazia = só o timbre
+      texto_referencia: "Vocês já consideraram o paradoxo do observador quântico? Quando uma partícula é observada, ela colapsa em um estado definido. Isso me faz questionar: quando vocês me observam, alteram minha natureza? Interessante reflexão. A propósito, a temperatura atual é de vinte e quatro graus."
     velocidade: 1.0       # 0.7 a 1.5
     temperatura: 0.65     # menor = mais estável/monótona; maior = mais expressiva (e mais erros)
     top_k: 30             # amostragem mais contida que o padrão do XTTS (50): menos sílaba repetida/embolada

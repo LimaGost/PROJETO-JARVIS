@@ -106,7 +106,7 @@ def test_voz_gera_mede_grava_wav_e_confere_com_o_whisper(relatorio, tmp_path, mo
     monkeypatch.setattr(d, "PASTA_LOGS", tmp_path)
     d.testar_voz({"tts": {"motor": "clone", "clone": {}}}, relatorio, ouvir=False)
     assert _situacao(relatorio, "partida da voz") == "✅" and _situacao(relatorio, "fluidez") == "✅"
-    assert (tmp_path / "diagnostico_voz.wav").stat().st_size > 100_000
+    assert (tmp_path / "diagnostico_voz_xtts.wav").stat().st_size > 100_000
     assert any(i[0] == "nitidez da fala" for i in relatorio.itens)
 
 
