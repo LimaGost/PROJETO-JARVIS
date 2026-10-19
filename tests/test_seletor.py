@@ -330,3 +330,87 @@ def test_qwen_so_fica_na_gpu_quando_e_o_cerebro():
 def test_reserva_sem_keep_alive_configurado_usa_2_minutos():
     assert seletor({**CFG, "cerebro": {"motor": "claude-cli"}}).local.keep_alive == "2m"
     assert seletor().local.keep_alive == -1
+
+
+# ------------------------------------------------------------------ modelo do Claude (Opus / Sonnet / Haiku)
+@pytest.mark.parametrize("fala,esperado", [
+    ("usa o opus", "opus"), ("muda para o Ópus", "opus"), ("troca pro sonnet", "sonnet"), ("usa o soneto", "sonnet"),
+    ("muda para o haiku", "haiku"), ("coloca o haicai", "haiku"), ("usa o claude opus", "opus"),
+])
+def test_modelo_por_voz(fala, esperado):
+    assert identificar(fala) == f"trocar:{esperado}"
+
+
+@pytest.mark.parametrize("fala", ["o que é um soneto?", "me fala sobre o opus dei", "escreve um haiku sobre o mar"])
+def test_perguntas_sobre_essas_palavras_nao_trocam(fala):
+    assert identificar(fala) is None
+
+
+def seletor_por_modelo(cfg=None, falhar=None):
+    """Fábrica que cria o cérebro com o modelo que estiver no config NA HORA (como a real)."""
+    criados = []
+    s = None
+
+    def cli():
+        modelo = s.cfg["claude_cli"]["modelo"]
+        c = Cerebro(f"claude · {modelo}", erro_aquecer=RuntimeError("sem cota") if modelo == falhar else None)
+        criados.append(c)
+        return c
+    s = seletor(cfg, fabricas={"claude-cli": cli, "claude-api": lambda: Cerebro(s.cfg["claude"]["modelo"])})
+    return s, criados
+
+
+def test_trocar_modelo_reinicia_o_claude_e_salva():
+    s, criados = seletor_por_modelo({**CFG, "cerebro": {"motor": "claude-cli"}})
+    s.aquecer()
+    assert s.rotulo == "claude · sonnet"
+    r = s.trocar_modelo_claude("opus")
+    assert r == {"ok": True, "atual": "claude-cli", "modelo": "opus", "erro": None}
+    assert s.rotulo == "claude · opus" and criados[0].encerrou == 1 and criados[1].esqueceu == 1
+    assert json.loads(modulo.ARQUIVO_PREFERENCIAS.read_text(encoding="utf-8")) == \
+        {"cerebro": "claude-cli", "modelo_claude": "opus"}
+    s2, _ = seletor_por_modelo({**CFG, "cerebro": {"motor": "claude-cli"}})    # Jarvis reaberto
+    assert s2.modelo_claude == "opus" and s2.estado()["modelo_claude"] == "opus"
+
+
+def test_trocar_modelo_estando_no_qwen_passa_para_o_claude():
+    s, _ = seletor_por_modelo()
+    descargas = []
+    s.local.descarregar = lambda: descargas.append(1)
+    assert s.atual == "qwen"
+    assert s.trocar_modelo_claude("haiku")["ok"]
+    assert s.atual == "claude-cli" and s.rotulo == "claude · haiku" and descargas == [1]
+
+
+def test_modelo_que_nao_sobe_mantem_o_atual():
+    s, criados = seletor_por_modelo({**CFG, "cerebro": {"motor": "claude-cli"}}, falhar="opus")
+    s.aquecer()
+    r = s.trocar_modelo_claude("opus")
+    assert not r["ok"] and "sem cota" in r["erro"] and r["modelo"] == "sonnet"
+    assert s.rotulo == "claude · sonnet" and criados[0].encerrou == 0      # o Sonnet continua respondendo
+    assert s.cfg["claude_cli"]["modelo"] == "sonnet"
+
+
+def test_modelo_desconhecido_e_api_acompanha():
+    s, _ = seletor_por_modelo({**CFG, "cerebro": {"motor": "claude"}})
+    assert "desconhecido" in s.trocar_modelo_claude("gpt-9")["erro"]
+    assert s.trocar_modelo_claude("haiku")["ok"]
+    assert s.atual == "claude-api" and s.rotulo == "claude-haiku-5-5"
+
+
+def test_trocar_modelo_nao_mexe_no_config_original():
+    cfg = {**CFG, "claude_cli": {"modelo": "sonnet"}}
+    s, _ = seletor_por_modelo(cfg)
+    s.trocar_modelo_claude("opus")
+    assert cfg["claude_cli"]["modelo"] == "sonnet"
+
+
+def test_controle_troca_modelo_por_voz_e_avisa():
+    voz = Voz()
+    s, _ = seletor_por_modelo({**CFG, "cerebro": {"motor": "claude-cli"}})
+    s.aquecer()
+    c = controle(s, voz)
+    cer = eventos("cerebro")
+    c.texto_do_hud("usa o opus")
+    assert s.rotulo == "claude · opus" and voz.ditas == ["Agora estou pensando com o Opus, senhor."]
+    assert cer[0]["trocando"] == "modelo:opus" and cer[-1]["modelo_claude"] == "opus" and cer[-1]["trocando"] is None

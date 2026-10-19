@@ -10,7 +10,9 @@ cerebro:
   reserva_local: true     # com motor Claude: se a internet, o login ou a cota falharem, o modelo local responde
 
 claude_cli:
-  modelo: sonnet          # apelidos do CLI: sonnet (rápido, gasta menos cota) | opus (mais capaz, gasta ~5x mais cota) | haiku
+  modelo: sonnet          # modelo inicial; troque na HUD (Opus · Sonnet · Haiku) ou por voz: "usa o Opus"
+                          # sonnet = equilíbrio | opus = mais capaz, gasta ~5x mais cota | haiku = mais rápido e econômico
+  modelos: [opus, sonnet, haiku]   # o que aparece para escolher (apelidos do `claude --model`)
   esforco: low            # low | medium | high: quanto ele "pensa". low = voz rápida
   timeout_s: 120          # sem nenhum evento por este tempo, o processo é reiniciado
   max_turnos_por_pedido: 30   # com o mouse, uma tarefa leva vários passos de ver e agir

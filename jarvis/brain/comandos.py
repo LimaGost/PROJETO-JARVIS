@@ -46,14 +46,24 @@ VERBOS_TROCA = {"usa", "usar", "use", "muda", "mudar", "troca", "trocar", "volta
 ALVO_QWEN = ("qwen", "quen", "queen", "kuen", "cuen", "quein")
 ALVO_CLAUDE = ("claude", "claudio", "clode", "cloud", "clod")
 ALVO_LOCAL = {"local", "offline"}
+# modelos do Claude, do jeito que o Whisper costuma escrever
+ALVO_MODELOS = {"opus": ("opus", "opos", "opuz", "hopus"),
+                "sonnet": ("sonnet", "sonet", "soneto", "sonete", "sonnete", "sonit"),
+                "haiku": ("haiku", "haicai", "haicu", "haico", "raicu", "aiku", "haikai")}
 
 
 def destino_cerebro(texto: str) -> str | None:
-    """'usa o claude' -> 'claude'; 'muda para o qwen' -> 'qwen'; senão None. Só frases curtas COM verbo de troca:
-    'o que é o claude?' é uma pergunta, não um comando."""
+    """'usa o claude' -> 'claude'; 'muda para o qwen' -> 'qwen'; 'usa o opus' -> 'opus'; senão None. Só frases
+    curtas COM verbo de troca: 'o que é o claude?' é uma pergunta, não um comando."""
     palavras = normalizar(texto).split()
     if not palavras or len(palavras) > MAX_PALAVRAS_TROCA or not any(p in VERBOS_TROCA for p in palavras):
         return None
+    for p in palavras:                  # o modelo vem antes: "usa o claude opus" é o Opus
+        if p in VERBOS_TROCA or len(p) < 4:
+            continue
+        for modelo, grafias in ALVO_MODELOS.items():
+            if any(SequenceMatcher(None, p, a).ratio() >= 0.8 for a in grafias):
+                return modelo
     for p in palavras:
         if p in VERBOS_TROCA or len(p) < 4:
             continue
@@ -93,7 +103,7 @@ def pedido_de_silencio(texto: str) -> bool:
 
 
 def identificar(texto: str) -> str | None:
-    """'desligar' | 'esquecer' | 'calar' | 'trocar:qwen' | 'trocar:claude' | None"""
+    """'desligar' | 'esquecer' | 'calar' | 'trocar:qwen' | 'trocar:claude' | 'trocar:opus' (sonnet, haiku) | None"""
     destino = destino_cerebro(texto)
     if destino:
         return f"trocar:{destino}"

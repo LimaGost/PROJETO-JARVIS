@@ -47,6 +47,32 @@ function renderCerebros() {
     });
     caixa.appendChild(b);
   }
+  renderModelosClaude(c, caixa);
+}
+
+const MODELOS_CLAUDE = {
+  opus: ["Opus", "O mais capaz: pensa melhor, gasta ~5x mais cota"],
+  sonnet: ["Sonnet", "Equilíbrio entre inteligência, velocidade e cota"],
+  haiku: ["Haiku", "O mais rápido e econômico"],
+};
+function renderModelosClaude(c, caixa) {
+  if (!(c.modelos_claude && c.modelos_claude.length > 1 && String(c.atual).startsWith("claude"))) return;
+  caixa.appendChild(el("span", "divisor", "·"));
+  for (const m of c.modelos_claude) {
+    const [nome, dica] = MODELOS_CLAUDE[m] || [m, ""];
+    const b = el("button", "btn modelo", nome);
+    b.type = "button";
+    b.title = dica;
+    const ativo = m === c.modelo_claude;
+    b.setAttribute("aria-pressed", String(ativo));
+    b.disabled = !S.conectado || !!c.trocando;
+    if (c.trocando === "modelo:" + m) b.classList.add("trocando");
+    if (!ativo) b.addEventListener("click", () => {
+      S.cerebro = { ...c, trocando: "modelo:" + m }; renderCerebros();
+      enviar({ tipo: "trocar_modelo_claude", modelo: m });
+    });
+    caixa.appendChild(b);
+  }
 }
 
 /* ============================================================ estado visível */

@@ -282,6 +282,11 @@ Três jeitos, sem reiniciar:
 - **Na HUD:** os botões **Qwen local · Claude · assinatura · Claude · API** no rodapé (voltaram em 2026-10-18). O ativo fica
   destacado; o que não está disponível fica apagado e o motivo aparece ao passar o mouse (ex.: "falta a chave em data/anthropic.key").
 - **Por voz/texto:** "usa o Claude", "muda para o Qwen", "volta pro local".
+- **Modelo do Claude (Opus · Sonnet · Haiku):** botões ao lado, na HUD, quando o Claude está ativo, ou por voz: "usa o
+  Opus", "muda para o Haiku" (se estiver no Qwen, já passa para o Claude). Opus = o mais capaz (gasta ~5x a cota),
+  Sonnet = equilíbrio, Haiku = o mais rápido e econômico. Trocar reinicia o processo do `claude` com o novo modelo
+  (~2 s), testa antes de largar o atual e continua a conversa. Fica salvo em `data/preferencias.json`. Lista em
+  `claude_cli.modelos`; vale também para o cérebro por API (`claude.modelos` mapeia o apelido para o id).
 - **`cerebro.motor` no `config.yaml`:** só a escolha inicial.
 - A escolha fica salva em `data/preferencias.json` (ignorado pelo git) e vale na próxima vez que ligar.
 - A troca espera o pedido atual acabar, sobe e testa a nova mentalidade **antes** de largar a antiga; se falhar, continua na atual e avisa.

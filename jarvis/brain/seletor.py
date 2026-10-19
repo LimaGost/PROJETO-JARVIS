@@ -5,6 +5,10 @@ sabe qual está em uso. Cada cérebro é criado só quando é escolhido pela pri
 pedir) e a escolha fica salva em data/preferencias.json.
 
 Ao trocar, a conversa em andamento recomeça (cada cérebro tem a sua), mas a memória de longo prazo é a mesma.
+
+Dentro do Claude também se escolhe o MODELO (Opus, Sonnet, Haiku): trocar reinicia o processo do `claude` com o
+novo `--model` (ou recria o cliente da API). O novo é testado antes de largar o atual, e recebe a conversa recente
+do banco: para o usuário, o Jarvis continua o mesmo, só pensando com outro modelo.
 """
 import json
 import shutil
@@ -15,19 +19,27 @@ from jarvis.config import RAIZ
 
 ARQUIVO_PREFERENCIAS = RAIZ / "data" / "preferencias.json"
 MOTOR_PARA_ID = {"ollama": "qwen", "claude-cli": "claude-cli", "claude": "claude-api"}
+MODELOS_CLAUDE = ("opus", "sonnet", "haiku")       # apelidos do `claude --model`
+MODELOS_API = {"opus": "claude-opus-5-5", "sonnet": "claude-sonnet-5-5", "haiku": "claude-haiku-5-5"}
+IDS_CLAUDE = ("claude-cli", "claude-api")
 
 
-def carregar_preferencia() -> str | None:
+def _preferencias() -> dict:
     try:
-        return json.loads(ARQUIVO_PREFERENCIAS.read_text(encoding="utf-8")).get("cerebro")
+        dados = json.loads(ARQUIVO_PREFERENCIAS.read_text(encoding="utf-8"))
+        return dados if isinstance(dados, dict) else {}
     except (OSError, ValueError):
-        return None
+        return {}
 
 
-def salvar_preferencia(id_: str):
+def carregar_preferencia(chave: str = "cerebro") -> str | None:
+    return _preferencias().get(chave)
+
+
+def salvar_preferencia(id_: str, **outras):
     try:
         ARQUIVO_PREFERENCIAS.parent.mkdir(parents=True, exist_ok=True)
-        ARQUIVO_PREFERENCIAS.write_text(json.dumps({"cerebro": id_}), encoding="utf-8")
+        ARQUIVO_PREFERENCIAS.write_text(json.dumps({**_preferencias(), "cerebro": id_, **outras}), encoding="utf-8")
     except OSError:
         pass  # perder a preferência não pode atrapalhar a troca
 
@@ -37,7 +49,14 @@ class Seletor:
                  disponibilidade: Callable[[str], str | None] | None = None):
         """`fabricas` e `disponibilidade` existem para teste; em produção vêm das implementações reais."""
         from jarvis.brain.llm import Cerebro
+        # cópia própria dos blocos do Claude: trocar o modelo não mexe no config de quem chamou
+        cfg = {**cfg, "claude_cli": dict(cfg.get("claude_cli", {}) or {}), "claude": dict(cfg.get("claude", {}) or {})}
         self.cfg, self.executor, self.memoria = cfg, executor, memoria
+        self.modelos_claude = list(cfg["claude_cli"].get("modelos", MODELOS_CLAUDE))
+        self.modelos_api = {**MODELOS_API, **(cfg["claude"].get("modelos") or {})}
+        salvo = carregar_preferencia("modelo_claude")
+        inicial = salvo if salvo in self.modelos_claude else cfg["claude_cli"].get("modelo", "sonnet")
+        self._aplicar_modelo(inicial)
         self.local = Cerebro(cfg, executor, memoria)               # sempre existe: é o Qwen e a reserva dos outros
         self._objetos: dict[str, object] = {"qwen": self.local}
         self._lock = threading.RLock()
@@ -80,7 +99,61 @@ class Seletor:
         return saida
 
     def estado(self) -> dict:
-        return {"atual": self.atual, "rotulo": self.rotulo, "opcoes": self.opcoes()}
+        return {"atual": self.atual, "rotulo": self.rotulo, "opcoes": self.opcoes(),
+                "modelos_claude": self.modelos_claude, "modelo_claude": self.modelo_claude}
+
+    # ------------------------------------------------------------ modelo do Claude (Opus / Sonnet / Haiku)
+    def _aplicar_modelo(self, modelo: str):
+        self.modelo_claude = modelo
+        self.cfg["claude_cli"]["modelo"] = modelo
+        if modelo in self.modelos_api:
+            self.cfg["claude"]["modelo"] = self.modelos_api[modelo]
+
+    def trocar_modelo_claude(self, modelo: str) -> dict:
+        """{'ok', 'atual', 'modelo', 'erro'}. Se o Qwen estiver ativo, já passa para o Claude com esse modelo.
+        O novo processo é testado antes de largar o atual: se falhar (cota, login), tudo continua como estava."""
+        with self._lock:
+            if modelo not in self.modelos_claude:
+                return {"ok": False, "atual": self.atual, "modelo": self.modelo_claude,
+                        "erro": f"modelo desconhecido (use {', '.join(self.modelos_claude)})"}
+            alvo = self.atual if self.atual in IDS_CLAUDE else self.resolver("claude")
+            if alvo is None:
+                return {"ok": False, "atual": self.atual, "modelo": self.modelo_claude, "erro": "o Claude não está disponível"}
+            if modelo == self.modelo_claude and alvo == self.atual and alvo in self._objetos:
+                return {"ok": True, "atual": self.atual, "modelo": modelo, "erro": None}
+            anterior_modelo, anterior_atual = self.modelo_claude, self.atual
+            self._aplicar_modelo(modelo)
+            novo = None
+            try:
+                novo = self._fabricas[alvo]()
+                novo.aquecer()
+                if getattr(novo, "usando_reserva", False):
+                    raise RuntimeError(getattr(novo, "ultimo_erro", None) or "não consegui iniciar")
+            except Exception as e:
+                self._aplicar_modelo(anterior_modelo)
+                self._encerrar_objeto(novo)
+                return {"ok": False, "atual": self.atual, "modelo": anterior_modelo,
+                        "erro": f"{type(e).__name__}: {str(e)[:140]}"}
+            for id_ in IDS_CLAUDE:              # os outros cérebros Claude estão no modelo velho: recriados na hora
+                velho = self._objetos.pop(id_, None)
+                if velho is not None and velho is not novo:
+                    self._encerrar_objeto(velho)
+            self._objetos[alvo] = novo
+            self.atual = alvo
+            getattr(novo, "nova_sessao", novo.esquecer)()
+            if anterior_atual == "qwen":
+                self._liberar("qwen")
+            salvar_preferencia(alvo, modelo_claude=modelo)
+            return {"ok": True, "atual": alvo, "modelo": modelo, "erro": None}
+
+    @staticmethod
+    def _encerrar_objeto(obj):
+        principal = getattr(obj, "principal", obj)
+        if obj is not None and hasattr(principal, "encerrar"):
+            try:
+                principal.encerrar()
+            except Exception:
+                pass
 
     def resolver(self, alvo: str) -> str | None:
         """'qwen' -> 'qwen'; 'claude' -> a melhor opção Claude disponível (assinatura antes da API)."""

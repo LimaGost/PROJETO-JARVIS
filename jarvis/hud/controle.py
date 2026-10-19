@@ -250,9 +250,43 @@ class Controle:
         if hasattr(self.cerebro, "estado"):
             bus.emitir("cerebro", trocando=trocando, **self.cerebro.estado())
 
-    def trocar_por_alvo(self, alvo: str):
-        """Comando de voz/texto ('usa o claude'): 'claude' vira a melhor opção Claude disponível."""
+    NOMES_MODELOS = {"opus": "Opus", "sonnet": "Sonnet", "haiku": "Haiku"}
+
+    def trocar_modelo_claude(self, modelo: str):
+        """Opus / Sonnet / Haiku, esperando o pedido atual acabar. Se o novo não subir, o atual continua."""
         sel = self.cerebro
+        if not hasattr(sel, "trocar_modelo_claude"):
+            bus.emitir("sistema", texto="Este JARVIS não troca o modelo do Claude.")
+            return
+        if not self.turno_lock.acquire(timeout=90):
+            self.enviar_cerebro()
+            bus.emitir("sistema", texto="Estou no meio de um pedido; tente trocar de novo em instantes.")
+            return
+        nome = self.NOMES_MODELOS.get(modelo, modelo)
+        try:
+            self.enviar_cerebro(trocando=f"modelo:{modelo}")
+            bus.emitir("estado", estado="iniciando", detalhe=f"Trocando para o {nome}…")
+            resultado = sel.trocar_modelo_claude(modelo)
+        finally:
+            self.turno_lock.release()
+        self.enviar_cerebro()
+        bus.emitir("estado", estado="aguardando")
+        if resultado["ok"]:
+            bus.emitir("sistema", texto=f"Claude agora no {nome}. A conversa continua de onde parou.")
+            if self.voz:
+                self.voz.falar(f"Agora estou pensando com o {nome}, {self.tratamento}.")
+        else:
+            bus.emitir("sistema", texto=f"Não consegui trocar para o {nome}: {resultado['erro']}. Continuo como estava.")
+            if self.voz:
+                self.voz.falar(f"Não consegui trocar para o {nome}, {self.tratamento}. Continuo com o modelo atual.")
+
+    def trocar_por_alvo(self, alvo: str):
+        """Comando de voz/texto ('usa o claude'): 'claude' vira a melhor opção Claude disponível;
+        'opus' / 'sonnet' / 'haiku' trocam o modelo do Claude (e passam para o Claude se estiver no Qwen)."""
+        sel = self.cerebro
+        if alvo in getattr(sel, "modelos_claude", ()):
+            self.trocar_modelo_claude(alvo)
+            return
         id_ = sel.resolver(alvo) if hasattr(sel, "resolver") else None
         if id_ is None:
             bus.emitir("sistema", texto="O Claude não está disponível agora.")

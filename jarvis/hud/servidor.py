@@ -153,6 +153,8 @@ class ServidorHUD:
             c.silenciar(m["valor"])
         elif tipo == "trocar_cerebro" and isinstance(m.get("id"), str) and len(m["id"]) < 30:
             threading.Thread(target=c.trocar_cerebro, args=(m["id"],), daemon=True).start()  # pode levar segundos
+        elif tipo == "trocar_modelo_claude" and isinstance(m.get("modelo"), str) and len(m["modelo"]) < 20:
+            threading.Thread(target=c.trocar_modelo_claude, args=(m["modelo"],), daemon=True).start()
         elif tipo == "pedir_memoria":
             c.enviar_memoria()
         elif tipo == "apagar_fato" and isinstance(m.get("id"), int):
