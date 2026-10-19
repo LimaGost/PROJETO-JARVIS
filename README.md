@@ -397,10 +397,40 @@ Usa a acessibilidade do Windows (UI Automation), dentro do Jarvis, sem servidor 
   em cada uma (`interface._exigir`).
 
 ## Testes
+Duas camadas: os **testes automáticos** conferem a lógica (sem GPU, microfone nem internet) e o **diagnóstico ao vivo**
+confere as peças reais deste PC.
+
+**1. Testes automáticos** (`pytest`):
 ```
 .venv\Scripts\python.exe -m pytest tests -q
 ```
-669 testes: programar pelo VS Code, resposta instantânea e avisos, voz única e fala emendada, continuidade da conversa, uso da assinatura, visão e mouse (coordenadas, travas, imagem chegando ao Claude), calar e interromper (comandos, detector de eco, escuta em paralelo), seletor de mentalidade (voz, escolha, troca com falha segura, persistência), claude-cli (isolamento, ponte HTTP e MCP, processo com `claude` falso, reserva), cérebro Claude por API, HUD (autenticação, confirmação por voz/clique, parar tudo), controle de interface, guarda do PowerShell (incluindo tentativas de burla), arquivos, executor/permissões, comandos de voz, sim/não, calculadora, detector de ações inventadas e memória (banco, segredos, consolidação, reflexão, ferramentas).
+- `tests/test_jornada.py`: um dia de uso passando pelas peças **reais** (Controle, Executor 🟢🟡🔴, ferramentas,
+  bancos SQLite, contexto do cérebro, fila da voz). Só o "pensar" é roteirizado e o hardware é simulado.
+  **Aprendizado:** estuda um manual e responde com base nele, inclusive depois de reiniciar. **Memória:** lembra o que você
+  contou depois de reiniciar, esquece de verdade, recusa senha. **Fala:** frases na ordem, frase longa em trechos sem perder
+  palavra, PARAR cala. **Ações:** 🟢 executa, 🟡 vai para o log, depois de ler documento a 🟡 pede confirmação, 🔴 só com
+  "sim" (este último só no Windows: usa a Lixeira).
+- Os demais arquivos testam cada peça a fundo: memória e reflexão, base de conhecimento e leitura (PDF, DOCX, bloqueio
+  da rede local), voz (reserva, trechos), guarda do PowerShell, HUD, Claude, Gmail/Agenda/WhatsApp e o próprio diagnóstico.
+
+**2. Diagnóstico ao vivo** (com o Jarvis **fechado** e o Ollama aberto):
+```
+.venv\Scripts\python.exe -m jarvis.diagnostico            # memória, aprendizado, internet, voz, ações
+.venv\Scripts\python.exe -m jarvis.diagnostico --ouvir    # + toca a voz gerada
+.venv\Scripts\python.exe -m jarvis.diagnostico --abrir    # + abre e fecha o Bloco de Notas de verdade
+.venv\Scripts\python.exe -m jarvis.diagnostico --cerebro  # + pergunta real ao Claude com ferramenta (gasta cota)
+.venv\Scripts\python.exe -m jarvis.diagnostico --so voz   # só uma parte
+```
+| Parte | O que mede |
+|---|---|
+| Memória | 3 perguntas com **outras palavras** ("qual o nome da minha mãe?" → "se chama Maria") com o embeddinggemma real |
+| Aprendizado | estuda um manual de 4 seções e confere se 4 perguntas acham a seção certa |
+| Internet | lê uma página real e confere o bloqueio da rede local |
+| Voz | partida da voz clonada, velocidade de geração (x tempo real), 1º som, **engasgos previstos**; depois o Whisper transcreve a própria voz gerada e dá a **nitidez** (% de palavras entendidas). O áudio fica em `data/logs/diagnostico_voz.wav` |
+| Ações | ferramentas 🟢 de verdade e um 🔴 que **não pode** executar sem "sim" |
+| Cérebro | o Claude resolve uma conta usando a calculadora (confere que usou a ferramenta e acertou) |
+
+Nada mexe nos seus dados (bancos temporários). Relatório em `data/logs/diagnostico.txt`, com dica para cada falha.
 
 ## Medidas (RTX 3050 8 GB, com o Qwen local)
 Com o `claude-cli` os tempos estão na seção do [cérebro `claude-cli`](#cérebro-claude-cli-a-sua-assinatura-sem-chave--o-motor-ativo).

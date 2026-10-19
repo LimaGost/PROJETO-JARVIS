@@ -66,6 +66,13 @@ def _dados_espeak() -> str:
     return str(copia)
 
 
+def _fechar(fonte):
+    """Fecha a fonte de áudio se ela souber fechar (gerador do processo da voz); qualquer iterável serve."""
+    fechar = getattr(fonte, "close", None)
+    if fechar is not None:
+        fechar()
+
+
 def _de_memoria(audio: np.ndarray):
     yield audio
 
@@ -199,7 +206,7 @@ class Voz:
                 if geracao == self._geracao:
                     self._tocar(texto, geracao, fonte)
                 elif fonte is not None:
-                    fonte.close()
+                    _fechar(fonte)
             except Exception as e:  # um erro de áudio não pode matar a thread
                 print(f"[tts] erro: {e}")
             finally:
@@ -234,10 +241,10 @@ class Voz:
             fluxo = iter(fonte)
             reserva = self._encher_reserva(fluxo, geracao)
             if geracao != self._geracao:
-                fonte.close()
+                _fechar(fonte)
                 return True
             if not reserva:
-                fonte.close()
+                _fechar(fonte)
                 return False
             tocou = True
             # latency "high": buffer maior na placa de som, um soluço da GPU não vira estalo no alto-falante
@@ -257,7 +264,7 @@ class Voz:
                     if texto in self.memorizaveis and pedacos and texto not in self._cache:
                         self._cache[texto] = np.concatenate(pedacos)
                 finally:
-                    fonte.close()
+                    _fechar(fonte)
         except Exception as e:
             print(f"[tts] voz clonada falhou ({e}).")
         return tocou
