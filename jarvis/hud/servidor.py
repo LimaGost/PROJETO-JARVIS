@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from jarvis.hud.bus import bus
 
 PASTA_WEB = Path(__file__).with_name("web")
+TEMAS = ("dourado", "ciano")      # hud.tema: dourado = J.A.R.V.I.S. do MCU (padrão) | ciano = visual frio anterior
 MAX_MENSAGEM = 4000
 INTERVALO_NIVEL_S = 0.05
 INTERVALO_STATS_S = 2.0
@@ -45,6 +46,8 @@ class ServidorHUD:
         self.host = host
         self.porta = porta_livre(host, porta)
         self.token = secrets.token_urlsafe(24)
+        tema = ((getattr(controle, "cfg", None) or {}).get("hud", {}) or {}).get("tema", "dourado")
+        self.tema = tema if tema in TEMAS else "dourado"     # entra no HTML: só valores conhecidos
         self.hosts_ok = {f"127.0.0.1:{self.porta}", f"localhost:{self.porta}"}
         self.origens_ok = {f"http://{h}" for h in self.hosts_ok}
         self._conexoes: set[asyncio.Queue] = set()
@@ -82,7 +85,7 @@ class ServidorHUD:
         @app.get("/", response_class=HTMLResponse)
         async def pagina():
             html = (PASTA_WEB / "index.html").read_text(encoding="utf-8")
-            return html.replace("__TOKEN__", self.token)
+            return html.replace("__TOKEN__", self.token).replace("__TEMA__", self.tema)
 
         @app.get("/web/{arquivo}")
         async def estatico(arquivo: str):

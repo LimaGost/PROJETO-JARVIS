@@ -484,3 +484,14 @@ def test_porta_ocupada_escolhe_outra():
         ocupada = s.getsockname()[1]
         assert porta_livre("127.0.0.1", ocupada) != ocupada
 
+
+
+@pytest.mark.parametrize("tema,esperado", [(None, "dourado"), ("ciano", "ciano"), ("dourado", "dourado"),
+                                           ('"><script>alert(1)</script>', "dourado")])
+def test_tema_do_config_vai_no_html_e_valor_estranho_nao_entra(tema, esperado):
+    ctl = montar(voz=VozFalsa(), mic=MicFalso(), memoria=None)
+    if tema is not None:
+        ctl.cfg = {**ctl.cfg, "hud": {"tema": tema}}
+    srv = ServidorHUD(ctl, porta=8831)
+    html = TestClient(srv.app, base_url=f"http://127.0.0.1:{srv.porta}").get("/").text
+    assert f'data-tema="{esperado}"' in html and "__TEMA__" not in html and "<script>alert" not in html

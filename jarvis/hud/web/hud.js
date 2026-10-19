@@ -272,7 +272,7 @@ function conectar() {
 
 /* ============================================================ telemetria: mostradores circulares */
 const dials = { cpu: { v: 0, alvo: 0 }, ram: { v: 0, alvo: 0 }, gpu: { v: 0, alvo: 0 }, vram: { v: 0, alvo: 0 } };
-function corPct(p) { return p >= 90 ? [255, 77, 77] : p >= 75 ? [255, 178, 36] : [25, 211, 255]; }
+function corPct(p) { return p >= 90 ? [255, 77, 77] : p >= 75 ? [255, 178, 36] : TEMA.normal; }
 
 function desenharDial(chave, dt, t) {
   const cv = $("d-" + chave), d = dials[chave];
@@ -314,11 +314,11 @@ function desenharOsc(t) {
   if (!cv) return;
   const c = cv.getContext("2d"), W = cv.width, H = cv.height;
   c.clearRect(0, 0, W, H);
-  c.strokeStyle = "rgba(25,211,255,.16)"; c.lineWidth = 1;
+  c.strokeStyle = `rgba(${TEMA.osc[0]},.16)`; c.lineWidth = 1;
   for (let i = 1; i < 4; i++) { c.beginPath(); c.moveTo(0, (H / 4) * i); c.lineTo(W, (H / 4) * i); c.stroke(); }
   for (let i = 1; i < 12; i++) { c.beginPath(); c.moveTo((W / 12) * i, 0); c.lineTo((W / 12) * i, H); c.stroke(); }
   const n = S.historicoNiveis.length;
-  c.shadowColor = "rgba(25,211,255,1)"; c.shadowBlur = 8; c.strokeStyle = "rgba(143,240,255,.95)"; c.lineWidth = 1.6;
+  c.shadowColor = `rgba(${TEMA.osc[0]},1)`; c.shadowBlur = 8; c.strokeStyle = `rgba(${TEMA.osc[1]},.95)`; c.lineWidth = 1.6;
   c.beginPath();
   for (let i = 0; i < n; i++) {
     const x = (i / (n - 1)) * W, amp = S.historicoNiveis[i] * (H * 0.42);
@@ -345,16 +345,39 @@ function aplicarStats(s) {
 }
 
 /* ============================================================ núcleo holográfico */
-// Esfera de filamentos de luz, no estilo da "mente" do J.A.R.V.I.S. nos filmes, só em ciano e azul.
+// Esfera de filamentos de luz, a "mente" do J.A.R.V.I.S. nos filmes. Dois temas (hud.tema no config.yaml):
+//  - dourado: o J.A.R.V.I.S. do MCU (Era de Ultron), globo âmbar com o centro incandescente, faíscas e luz quente;
+//  - ciano: o visual anterior, frio, em ciano e azul.
 // O vermelho fica reservado ao pedido de confirmação, que é um alerta.
-const CORES = {
-  iniciando: [25, 211, 255], aguardando: [25, 211, 255], ouvindo: [70, 230, 255], transcrevendo: [90, 200, 255],
-  pensando: [64, 150, 255], falando: [140, 245, 255], confirmando: [255, 77, 77], mudo: [100, 125, 140],
+const TEMAS = {
+  dourado: {
+    cores: { iniciando: [255, 160, 50], aguardando: [255, 166, 56], ouvindo: [255, 202, 98], transcrevendo: [255, 186, 76],
+             pensando: [255, 128, 32], falando: [255, 226, 152], confirmando: [255, 64, 96], mudo: [140, 120, 100] },
+    fundo: [124, 46, 6], normal: [255, 170, 51], ceu: ["#2b1507", "#120903", "#050302"],
+    nuvens: [[0.16, 0.28, [190, 92, 18], 0.2], [0.84, 0.22, [150, 58, 12], 0.18], [0.5, 0.42, [255, 168, 58], 0.1],
+             [0.78, 0.78, [60, 150, 200], 0.05], [0.24, 0.82, [175, 102, 28], 0.12], [0.62, 0.1, [120, 48, 18], 0.08]],
+    estrela: (rnd) => [255, (195 + rnd() * 45) | 0, (140 + rnd() * 70) | 0],
+    estrelas: [[255, 242, 218], [255, 202, 120], [150, 220, 255]], grade: "255,170,51",
+    poeira: ["rgb(255,206,120)", "rgb(255,150,56)"], cadente: ["rgba(255,246,222,0.9)", "rgba(255,180,80,0)"],
+    osc: ["255,170,51", "255,214,140"],
+  },
+  ciano: {
+    cores: { iniciando: [25, 211, 255], aguardando: [25, 211, 255], ouvindo: [70, 230, 255], transcrevendo: [90, 200, 255],
+             pensando: [64, 150, 255], falando: [140, 245, 255], confirmando: [255, 77, 77], mudo: [100, 125, 140] },
+    fundo: [16, 72, 190], normal: [25, 211, 255], ceu: ["#062038", "#030d1c", "#010308"],
+    nuvens: [[0.16, 0.28, [20, 130, 180], 0.2], [0.84, 0.22, [40, 70, 190], 0.2], [0.5, 0.42, [30, 190, 255], 0.09],
+             [0.78, 0.78, [255, 160, 60], 0.07], [0.24, 0.82, [20, 150, 175], 0.12], [0.62, 0.1, [90, 60, 190], 0.08]],
+    estrela: (rnd) => [(190 + rnd() * 65) | 0, (215 + rnd() * 40) | 0, 255],
+    estrelas: [[230, 245, 255], [150, 230, 255], [255, 205, 140]], grade: "34,216,255",
+    poeira: ["rgb(255,190,100)", "rgb(120,230,255)"], cadente: ["rgba(220,250,255,0.9)", "rgba(120,220,255,0)"],
+    osc: ["25,211,255", "143,240,255"],
+  },
 };
-const AZUL_PROFUNDO = [16, 72, 190];
+// o servidor grava o tema no <html data-tema>: já nasce com as cores certas, sem piscar o outro tema
+let TEMA = TEMAS[document.documentElement.dataset.tema] || TEMAS.dourado;
 const REDUZIR = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const TAU = Math.PI * 2;
-const reator = { t: 0, nivel: 0, cor: [25, 211, 255], giro: 0, giro2: 0, fluxo: 0, onda: 0 };
+const reator = { t: 0, nivel: 0, cor: [...TEMA.cores.iniciando], giro: 0, giro2: 0, fluxo: 0, onda: 0 };
 
 // geometria fixa, gerada uma vez com semente para o desenho ser o mesmo a cada recarga
 function gerador(s) {
@@ -679,11 +702,11 @@ function desenharReator(dt) {
   reator.nivel += (alvo - reator.nivel) * Math.min(1, dt * 14);
   S.historicoNiveis.push(reator.nivel); S.historicoNiveis.shift();
 
-  const alvoCor = CORES[e] || CORES.aguardando;
+  const alvoCor = TEMA.cores[e] || TEMA.cores.aguardando;
   for (let i = 0; i < 3; i++) reator.cor[i] += (alvoCor[i] - reator.cor[i]) * Math.min(1, dt * 5);
   const cor = reator.cor.map(Math.round), [r, g, b] = cor;
   const rgba = (a) => `rgba(${r},${g},${b},${a})`;
-  const fundo = AZUL_PROFUNDO.map((v, i) => Math.round(v * 0.65 + cor[i] * 0.35)).join(",");
+  const fundo = TEMA.fundo.map((v, i) => Math.round(v * 0.65 + cor[i] * 0.35)).join(",");
 
   const n = reator.nivel;
   const vel = REDUZIR ? 0.08 : (e === "pensando" ? 2.2 : e === "falando" ? 0.9 : e === "mudo" ? 0.08 : 0.42);
@@ -740,12 +763,11 @@ function prepararCosmos() {
   cv.width = cosmos.base.width = W; cv.height = cosmos.base.height = H;
   const rnd = gerador(4242), c = cosmos.base.getContext("2d");
   let g = c.createRadialGradient(W * 0.5, H * 0.4, 0, W * 0.5, H * 0.4, Math.hypot(W, H) * 0.62);
-  g.addColorStop(0, "#062038"); g.addColorStop(0.45, "#030d1c"); g.addColorStop(1, "#010308");
+  g.addColorStop(0, TEMA.ceu[0]); g.addColorStop(0.45, TEMA.ceu[1]); g.addColorStop(1, TEMA.ceu[2]);
   c.fillStyle = g; c.fillRect(0, 0, W, H);
-  // nebulosas: bolhas de luz sobrepostas (ciano, azul profundo e um toque âmbar, como o globo dourado)
+  // nebulosas: bolhas de luz sobrepostas, nas cores do tema
   c.globalCompositeOperation = "lighter";
-  const nuvens = [[0.16, 0.28, [20, 130, 180], 0.2], [0.84, 0.22, [40, 70, 190], 0.2], [0.5, 0.42, [30, 190, 255], 0.09],
-    [0.78, 0.78, [255, 160, 60], 0.07], [0.24, 0.82, [20, 150, 175], 0.12], [0.62, 0.1, [90, 60, 190], 0.08]];
+  const nuvens = TEMA.nuvens;
   const M = Math.max(W, H);
   for (const [x, y, [r, gg, b], a] of nuvens) {
     for (let i = 0; i < 12; i++) {
@@ -758,11 +780,12 @@ function prepararCosmos() {
   // poeira estelar fixa
   for (let i = 0, n = Math.round((W * H) / 1500); i < n; i++) {
     const a = 0.08 + rnd() * rnd() * 0.75, s = rnd() < 0.96 ? 1 : 1.7;
-    c.fillStyle = `rgba(${(190 + rnd() * 65) | 0},${(215 + rnd() * 40) | 0},255,${a})`;
+    const [er, eg, eb] = TEMA.estrela(rnd);
+    c.fillStyle = `rgba(${er},${eg},${eb},${a})`;
     c.fillRect(rnd() * W, rnd() * H, s, s);
   }
   c.globalCompositeOperation = "source-over";
-  const cores = [[230, 245, 255], [150, 230, 255], [255, 205, 140]];
+  const cores = TEMA.estrelas;
   cosmos.estrelas = Array.from({ length: Math.round((W * H) / 8000) }, () => ({
     x: rnd() * W, y: rnd() * H, z: 0.2 + rnd() * 0.8, f: rnd() * TAU, cor: cores[rnd() < 0.6 ? 0 : rnd() < 0.7 ? 1 : 2] }));
   cosmos.poeira = Array.from({ length: Math.round(W / 22) }, () => novaPoeira(true));
@@ -792,7 +815,7 @@ function desenharCosmos(dt, t) {
   const y0 = H * 0.66, fundoMesa = H + 4, vx = W / 2;
   cosmos.grade = (cosmos.grade + dt * 0.18 * lento) % 1;
   const gv = c.createLinearGradient(0, y0, 0, fundoMesa);
-  gv.addColorStop(0, "rgba(34,216,255,0)"); gv.addColorStop(1, "rgba(34,216,255,0.16)");
+  gv.addColorStop(0, `rgba(${TEMA.grade},0)`); gv.addColorStop(1, `rgba(${TEMA.grade},0.16)`);
   c.globalAlpha = 1; c.strokeStyle = gv; c.lineWidth = 1;
   c.beginPath();
   for (let k = -18; k <= 18; k++) { c.moveTo(vx + k * W * 0.012, y0); c.lineTo(vx + k * W * 0.09, fundoMesa); }
@@ -800,12 +823,12 @@ function desenharCosmos(dt, t) {
   for (let i = 0; i < 14; i++) {
     const d = i + 1 - cosmos.grade, y = y0 + (fundoMesa - y0) / (1 + d * 0.55), q = (y - y0) / (fundoMesa - y0);
     c.globalAlpha = q * q * 0.5;
-    c.strokeStyle = "rgba(34,216,255,0.32)";
+    c.strokeStyle = `rgba(${TEMA.grade},0.32)`;
     c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke();
   }
   // brilho onde a mesa encontra o horizonte
   const gh = c.createLinearGradient(0, y0 - 30, 0, y0 + 30);
-  gh.addColorStop(0, "rgba(34,216,255,0)"); gh.addColorStop(0.5, "rgba(34,216,255,0.06)"); gh.addColorStop(1, "rgba(34,216,255,0)");
+  gh.addColorStop(0, `rgba(${TEMA.grade},0)`); gh.addColorStop(0.5, `rgba(${TEMA.grade},0.06)`); gh.addColorStop(1, `rgba(${TEMA.grade},0)`);
   c.globalAlpha = 1; c.fillStyle = gh; c.fillRect(0, y0 - 30, W, 60);
 
   // poeira de luz subindo, como as partículas soltas dos hologramas
@@ -814,7 +837,7 @@ function desenharCosmos(dt, t) {
     p.y -= p.v * dt * lento; p.x += p.d * dt * lento;
     if (p.y < -10) { cosmos.poeira[i] = novaPoeira(false); continue; }
     c.globalAlpha = Math.min(1, (H - p.y) / (H * 0.3)) * (0.35 + 0.35 * Math.sin(t * 2 + p.f));
-    c.fillStyle = p.ouro ? "rgb(255,190,100)" : "rgb(120,230,255)";
+    c.fillStyle = p.ouro ? TEMA.poeira[0] : TEMA.poeira[1];
     c.fillRect(p.x, p.y, p.s, p.s);
   }
 
@@ -830,7 +853,7 @@ function desenharCosmos(dt, t) {
       k.vida += dt;
       const v = 900, x = k.x + k.dx * v * k.vida, y = k.y + k.dy * v * k.vida, cauda = 120;
       const gc = c.createLinearGradient(x, y, x - k.dx * cauda, y - k.dy * cauda);
-      gc.addColorStop(0, "rgba(220,250,255,0.9)"); gc.addColorStop(1, "rgba(120,220,255,0)");
+      gc.addColorStop(0, TEMA.cadente[0]); gc.addColorStop(1, TEMA.cadente[1]);
       c.globalAlpha = Math.max(0, 1 - k.vida / 0.9); c.strokeStyle = gc; c.lineWidth = 1.5;
       c.beginPath(); c.moveTo(x, y); c.lineTo(x - k.dx * cauda, y - k.dy * cauda); c.stroke();
       if (k.vida > 0.9) cosmos.cadente = null;
