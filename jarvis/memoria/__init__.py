@@ -21,7 +21,7 @@ def criar(cfg: dict, ocupado: threading.Event | None = None):
         return None, None
     llm = cfg["llm"]
     host = llm["host"].replace("localhost", "127.0.0.1")
-    embedder = Embedder(host, m.get("embeddings", "embeddinggemma"))
+    embedder = Embedder(host, m.get("embeddings", "embeddinggemma"), m.get("embeddings_keep_alive", "30m"))
     memoria = Memoria(os.environ.get("JARVIS_MEMORIA") or caminho(m.get("banco", "data/memoria/jarvis.db")), embedder)
     consolidador = Consolidador(memoria, ollama.Client(host=host), llm["modelo"],
                                 {"num_ctx": llm.get("contexto", 4096)}, llm["keep_alive"])

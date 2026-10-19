@@ -9,6 +9,8 @@ from functools import lru_cache
 import numpy as np
 import ollama
 
+from jarvis import recursos
+
 # formatos de prompt recomendados para o embeddinggemma
 _PREFIXOS = {
     "consulta": "task: search result | query: ",
@@ -17,9 +19,10 @@ _PREFIXOS = {
 
 
 class Embedder:
-    def __init__(self, host: str, modelo: str):
+    def __init__(self, host: str, modelo: str, keep_alive="30m"):
         self.cliente = ollama.Client(host=host.replace("localhost", "127.0.0.1"))
         self.modelo = modelo
+        self.keep_alive = keep_alive   # antes -1 (para sempre): ~1 GB de RAM preso mesmo com o PC jogando
         self.dimensao: int | None = None
 
     def vetores(self, textos: list[str], tipo: str = "documento") -> np.ndarray:
@@ -29,7 +32,7 @@ class Embedder:
         r = self.cliente.embed(
             model=self.modelo,
             input=[_PREFIXOS[tipo] + t for t in textos],
-            keep_alive=-1,
+            keep_alive=recursos.keep_alive(self.keep_alive),
             options={"num_gpu": 0},
         )
         m = np.asarray(r.embeddings, dtype=np.float32)

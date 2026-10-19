@@ -5,6 +5,7 @@
 """
 import base64
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -30,7 +31,9 @@ def instalado() -> bool:
 
 def _powershell(script: str):
     codificado = base64.b64encode(script.encode("utf-16-le")).decode()
-    r = subprocess.run(["pwsh", "-NoProfile", "-NonInteractive", "-EncodedCommand", codificado],
+    # pwsh (PowerShell 7) nem sempre está instalado; o powershell.exe vem com todo Windows
+    exe = shutil.which("pwsh") or shutil.which("powershell") or "powershell"
+    r = subprocess.run([exe, "-NoProfile", "-NonInteractive", "-EncodedCommand", codificado],
                        capture_output=True, text=True, timeout=30)
     if r.returncode != 0:
         raise RuntimeError(r.stderr.strip() or "o PowerShell falhou")

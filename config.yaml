@@ -40,8 +40,15 @@ hud:
   abrir_ao_iniciar: true  # abre a janela da HUD (Edge, modo aplicativo)
   bandeja: true           # ícone na bandeja do Windows
 
+recursos:                 # Jarvis ligado o tempo todo sem pesar no jogo (jarvis/recursos.py)
+  modo_jogo_automatico: true   # GPU ocupada por outro programa: tira Qwen e embeddings do Ollama e segura a reflexão
+  gpu_jogo_pct: 50             # uso da GPU (%) que conta como jogo/programa pesado
+  segundos_para_entrar: 20     # por quanto tempo seguido
+  segundos_para_sair: 90       # GPU livre por esse tempo: volta ao normal
+
 memoria:
   ativa: true
+  embeddings_keep_alive: 30m   # o embeddinggemma (~1 GB de RAM) sai da memória depois de 30 min sem uso (era: nunca)
   banco: data/memoria/jarvis.db
   embeddings: embeddinggemma   # roda na CPU; em português acertou 15/15 (nomic-embed-text: 12/15)
 

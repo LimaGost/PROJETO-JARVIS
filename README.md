@@ -163,6 +163,13 @@ O **Ollama precisa estar aberto** (ícone na bandeja ou `ollama serve`). Na part
 - **HUD:** abre sozinha em **http://127.0.0.1:8765** (ou na próxima porta livre; veja a linha "HUD em ..." no console). Dá para digitar pedidos, ver a conversa e a memória, e usar **PARAR TUDO** (Esc) e Mudo.
 - **"Tchau Jarvis"**, **"Desligar Jarvis"** ou **"Pode dormir"** encerram. **"Esqueça a conversa"** recomeça. **"Fica quieto"** só cala. Ctrl+C também encerra.
 - Ações perigosas (🔴) sempre pedem **"Confirma?"** por voz ou clique na HUD; veja [Segurança](#segurança-como-as-permissões-funcionam).
+- **Ligado o tempo todo:** `python main.py --instalar-inicio` põe o Jarvis para subir com o Windows (só o ícone na
+  bandeja). Deixe o Ollama também iniciando com o Windows (o instalador dele já faz isso).
+- **Modo jogo (automático):** com outro programa usando a GPU acima de 50% por 20 s (jogo, render, IA), o Jarvis tira
+  da memória do Ollama os modelos **dele** (Qwen ~5,5 GB de VRAM, embeddinggemma ~1 GB de RAM), segura a reflexão
+  da memória (que subia o Qwen no meio do jogo) e o que o Ollama carregar durante o jogo sai 30 s depois. Voz e ouvido
+  continuam: "Hey Jarvis" funciona jogando. Com a GPU livre por 90 s, volta ao normal. Ajustes em `recursos:` no
+  `config.yaml`. Os embeddings agora saem da memória após 30 min sem uso (antes: nunca).
 - **Partida lenta?** No fim da partida o console mostra `[partida] total Xs: imports … · Whisper … · cérebro … · esperando a voz …`,
   e a mesma linha fica em `data/logs/partida.log`. As fases da voz clonada (bibliotecas, modelo na GPU, molde da voz,
   aquecimento) ficam em `data/logs/voz_clonada.log`. O molde da voz é calculado uma vez e guardado em

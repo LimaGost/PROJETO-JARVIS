@@ -9,6 +9,7 @@ import sys  # noqa: E402
 import threading  # noqa: E402
 import traceback  # noqa: E402
 
+from jarvis import recursos  # noqa: E402
 from jarvis.brain import avisos
 from jarvis.brain.comandos import identificar, sim_ou_nao
 from jarvis.brain.seletor import Seletor
@@ -71,6 +72,19 @@ def aquecer_ou_sair(cerebro, cfg):
                 bus.emitir("estado", estado="iniciando", detalhe="Aguardando o Ollama ficar pronto…")
                 avisou = True
             time.sleep(3)
+
+
+def iniciar_guardiao(cfg, ctl):
+    """Modo jogo (jarvis/recursos.py): com outro programa usando a GPU pesado, tira os modelos DO JARVIS da memória
+    do Ollama e segura a reflexão. Modelos de outros programas no Ollama não são tocados."""
+    import ollama
+    from jarvis.recursos import Guardiao
+    modelos = [cfg["llm"]["modelo"], cfg.get("memoria", {}).get("embeddings", "embeddinggemma")]
+    cliente = ollama.Client(host=cfg["llm"]["host"].replace("localhost", "127.0.0.1"))
+    guardiao = Guardiao(cfg, ctl._gpu_info, lambda: ctl.ocupado.is_set() or bus.falando or ctl._gerando, cliente,
+                        modelos, avisar=lambda t: (print(f"[recursos] {t}"), bus.emitir("sistema", texto=t)))
+    guardiao.iniciar()
+    return guardiao
 
 
 def iniciar_hud(cfg, ctl, silencioso: bool):
@@ -211,6 +225,7 @@ def modo_voz(cfg, silencioso: bool):
     ctl.cerebro = cerebro = Seletor(cfg, executor, memoria)
     if reflexao:
         reflexao.consolidador.keep_alive = lambda: cerebro.local.keep_alive
+    iniciar_guardiao(cfg, ctl)
     bus.emitir("estado", estado="iniciando", detalhe="Carregando o modelo de linguagem…")
     aquecer_ou_sair(cerebro, cfg)
     ctl.enviar_cerebro()
@@ -240,7 +255,7 @@ def modo_voz(cfg, silencioso: bool):
     falhas = 0
     try:
         while not ctl.encerrar.is_set():
-            if reflexao and cerebro.atual == "qwen":   # com o Claude, quem decide é o zelador (espera o PC ocioso)
+            if reflexao and cerebro.atual == "qwen" and not recursos.em_jogo():   # com o Claude, decide o zelador
                 reflexao.em_segundo_plano(aviso=lambda txt: bus.emitir("sistema", texto=txt.strip()))
             try:
                 if not conversar(cfg, ctl, ocupado):
@@ -335,6 +350,7 @@ def modo_texto(cfg, falar: bool, silencioso: bool):
     ctl.cerebro = cerebro = Seletor(cfg, executor, memoria)
     if reflexao:
         reflexao.consolidador.keep_alive = lambda: cerebro.local.keep_alive
+    iniciar_guardiao(cfg, ctl)
     bus.emitir("estado", estado="iniciando", detalhe="Carregando o modelo de linguagem…")
     aquecer_ou_sair(cerebro, cfg)
     ctl.enviar_cerebro()

@@ -5,6 +5,7 @@ from typing import Iterator
 
 import ollama
 
+from jarvis import recursos
 from jarvis.brain import avisos
 from jarvis.tools import conhecimento
 from jarvis.tools.sistema import hora_data
@@ -155,7 +156,7 @@ class Cerebro:
     def keep_alive(self):
         """Cérebro principal: fica na GPU para sempre. Reserva do Claude: sai da GPU pouco depois do último uso,
         senão Qwen + Whisper + voz clonada estouram os 8 GB e o Windows joga o excesso para a RAM (o PC trava)."""
-        return self._keep_alive_reserva if self.so_reserva else self._keep_alive
+        return recursos.keep_alive(self._keep_alive_reserva if self.so_reserva else self._keep_alive)
 
     def descarregar(self):
         """Tira o modelo da GPU agora (deixou de ser o cérebro principal)."""

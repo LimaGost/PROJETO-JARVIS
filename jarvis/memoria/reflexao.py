@@ -12,6 +12,8 @@ from pathlib import Path
 
 import ollama
 
+from jarvis import recursos
+
 from jarvis.memoria.banco import CATEGORIAS, Memoria, contem_segredo
 
 DUPLICADO = 0.94    # acima: o mesmo fato com outras palavras (paráfrases deram 0,93-0,99)
@@ -218,12 +220,16 @@ class Reflexao:
         def vigiar():
             while True:
                 time.sleep(intervalo_s)
-                if self.ocupado.is_set():
+                if not self._livre():
                     continue
                 hoje = self.pode_rodar(ocioso_s, inicio, exigir_ocio())
                 if hoje is not None:
                     self.em_segundo_plano(aviso, incluir_hoje=hoje)
         threading.Thread(target=vigiar, daemon=True).start()
+
+    def _livre(self) -> bool:
+        """Nem conversando nem jogando: jogando, a reflexão subiria o Qwen (~5,5 GB) na GPU no meio do jogo."""
+        return not self.ocupado.is_set() and not recursos.em_jogo()
 
     def pode_rodar(self, ocioso_s: int, inicio: datetime, exigir_ocio: bool) -> bool | None:
         """None = não rodar agora; senão, se as conversas de hoje já podem entrar (parado há `ocioso_s`)."""
