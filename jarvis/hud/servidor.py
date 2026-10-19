@@ -24,7 +24,7 @@ from jarvis.hud.bus import bus
 
 PASTA_WEB = Path(__file__).with_name("web")
 TEMAS = ("ciano", "dourado")      # hud.tema: ciano = visual do Jarvis (padrão) | dourado = variação âmbar opcional
-MAX_MENSAGEM = 4000
+MAX_MENSAGEM = 32000      # a Central manda fluxos de automação inteiros
 INTERVALO_NIVEL_S = 0.05
 INTERVALO_STATS_S = 2.0
 
@@ -162,6 +162,13 @@ class ServidorHUD:
             c.enviar_memoria()
         elif tipo == "apagar_fato" and isinstance(m.get("id"), int):
             c.apagar_fato(m["id"])
+        elif tipo == "central" and isinstance(m.get("op"), str) and len(m["op"]) < 40:
+            central = getattr(c, "central", None)         # JARVIS Connect: só existe se connect.ativo
+            if central is None:
+                self._difundir({"tipo": "central", "op": m["op"], "pedido": m.get("pedido"), "ok": False,
+                                "erro": "o JARVIS Connect está desligado (connect.ativo no config.yaml)"})
+            else:
+                self._difundir(central.tratar(m))      # direto, sem o corte do bus: o QR code passa de 4 mil caracteres
 
     # ------------------------------------------------------------ difusão
     def _difundir(self, evento: dict):

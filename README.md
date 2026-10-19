@@ -269,6 +269,35 @@ sexta às 15h", "manda no WhatsApp pra Maria que eu chego às 8". Configuração
 - Na confirmação a tela mostra destinatário, assunto/número e o começo do texto.
 - **Por que só com o Claude:** são 6 ferramentas a mais (~600 tokens) e o contexto de 6144 tokens do Qwen já está no limite.
 
+## JARVIS Connect: integrações, tarefas e automações (detalhes em [docs/CONNECT.md](docs/CONNECT.md))
+A **Central** abre pelo botão **Central** no topo da HUD ou por voz ("abre a central"). Tem quatro abas:
+- **Painel:** integrações ativas, automações, tarefas, falhas, consumo de APIs, próximas execuções e linha do tempo.
+- **Integrações:** catálogo por categoria, com busca, estado em tempo real, teste de conexão, configuração e histórico.
+  Cada cartão diz se a integração está **implementada**, **em desenvolvimento** ou **planejada**.
+- **Tarefas:** com prioridade, data/hora e lembrete falado.
+- **Automações:** editor visual **Gatilho → Condições → Ações → Resultado**, com ações em paralelo, repetição,
+  tratamento de erro, teste antes de ligar, histórico e modelos prontos.
+
+- **Por voz** (Claude): "todo dia às 8h resuma meus e-mails importantes", "quando chegar mensagem com orçamento,
+  crie uma tarefa", "toda segunda me manda o planejamento da semana", "amanhã às 9h manda pro João lembrando da
+  reunião". Ferramentas:
+  - automações: `criar_automacao`, `listar_automacoes`, `testar_automacao`, `rodar_automacao`, `ligar_automacao`,
+    `apagar_automacao`;
+  - tarefas: `criar_tarefa`, `listar_tarefas`, `concluir_tarefa` (as de tarefa também vão para o Qwen);
+  - integrações: `ver_integracoes`, `whatsapp_conversas` e `abrir_central`.
+- **WhatsApp grátis pela Evolution API** (Docker, `servicos/evolution`). Envia, recebe por webhook e lê conversas;
+  conecta pelo QR code dentro da Central. Com ela ligada, `whatsapp_enviar` manda direto, sem depender da janela.
+- **Envio aprovado ao criar** (escolha do Iury). Automação que manda WhatsApp/e-mail é 🔴 uma vez, mostrando
+  destinatário e texto. Depois roda sozinha, só para quem foi aprovado. Para outra pessoa, só texto fixo. Mudou o
+  fluxo, aprova de novo.
+- **Segurança:**
+  - chaves no cofre cifrado pela DPAPI (`data/connect/cofre.json`), nunca no `config.yaml` nem na HUD;
+  - webhooks num servidor à parte (127.0.0.1:8766), com segredo ou assinatura; o Cloudflare Tunnel aponta só
+    para ele;
+  - a IA das automações roda **sem ferramentas**;
+  - repetição com espera, limite de ritmo por serviço e proteção contra execução duplicada.
+- Configure `connect.meu_whatsapp` e `connect.meu_email` (o "eu" das automações) no `config.yaml`.
+
 ## Programar pelo Jarvis (`programar`, `tarefa_programacao`, `vscode`)
 "Jarvis, cria uma página de login", "corrige esse erro", "roda os testes": o pedido vai para o **Claude Code** (Sonnet,
 pela assinatura), que trabalha na pasta do projeto aberto no VS Code (título da janela + pastas que o VS Code guarda em

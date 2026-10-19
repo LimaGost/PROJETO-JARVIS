@@ -1,0 +1,38 @@
+# Evolution API v2 (WhatsApp grátis, código aberto) para o JARVIS Connect.
+# Subir:   copie .env.exemplo para .env, troque as duas senhas e rode:  docker compose up -d
+# Depois:  Central > Integrações > WhatsApp (Evolution API) > Configurar (cole a AUTHENTICATION_API_KEY) > Conectar (QR).
+# Só escuta em 127.0.0.1: nada fica exposto na rede nem na internet.
+services:
+  evolution:
+    image: evoapicloud/evolution-api:v2.3.7     # versão conferida com o Jarvis
+    restart: unless-stopped
+    depends_on: [postgres, redis]
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file: .env
+    environment:
+      DATABASE_CONNECTION_URI: postgresql://evolution:${POSTGRES_PASSWORD}@postgres:5432/evolution?schema=evolution_api
+    volumes:
+      - evolution_instances:/evolution/instances
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: evolution
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+volumes:
+  evolution_instances:
+  postgres_data:
+  redis_data:

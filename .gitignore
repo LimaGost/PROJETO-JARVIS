@@ -8,6 +8,8 @@ data/memoria/
 data/spotify/
 data/google/
 data/conhecimento/
+data/connect/
+servicos/evolution/.env
 data/logs/
 data/anthropic.key
 data/claude_cli/

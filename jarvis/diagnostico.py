@@ -4,7 +4,7 @@
     .venv\\Scripts\\python.exe -m jarvis.diagnostico --ouvir         # e toca a voz gerada no alto-falante
     .venv\\Scripts\\python.exe -m jarvis.diagnostico --abrir         # e abre/fecha o Bloco de Notas de verdade
     .venv\\Scripts\\python.exe -m jarvis.diagnostico --cerebro       # e faz uma pergunta ao Claude (gasta cota)
-    .venv\\Scripts\\python.exe -m jarvis.diagnostico --so voz        # só uma parte: ollama memoria aprendizado
+    .venv\\Scripts\\python.exe -m jarvis.diagnostico --so voz        # só uma parte: ollama memoria aprendizado connect
                                                                     # internet voz acoes cerebro
 
 Nada aqui mexe nos seus dados: memória e conhecimento são testados em bancos temporários, que são apagados no fim.
@@ -433,7 +433,51 @@ def testar_cerebro(cfg, r: Relatorio, pasta: Path):
 
 
 # ------------------------------------------------------------------ principal
-PARTES = ("ollama", "memoria", "aprendizado", "internet", "voz", "acoes", "cerebro")
+PARTES = ("ollama", "memoria", "aprendizado", "internet", "voz", "acoes", "connect", "cerebro")
+
+
+def testar_connect(cfg, r: Relatorio, pasta: Path):
+    """JARVIS Connect: cofre (DPAPI), banco, motor com uma automação de teste, webhooks e as integrações reais."""
+    r.secao("JARVIS Connect")
+    from jarvis.connect import motor as m
+    from jarvis.connect.banco import Banco
+    from jarvis.connect.cofre import Cofre, cofre, protecao_padrao
+    teste = Cofre(pasta / "cofre.json")
+    teste.guardar("diag", {"chave": "segredo-de-teste"})
+    bruto = (pasta / "cofre.json").read_text(encoding="utf-8")
+    ok = teste.ler("diag").get("chave") == "segredo-de-teste" and "segredo-de-teste" not in bruto
+    r.item("cofre de credenciais", ok if protecao_padrao().nome == "dpapi" else None,
+           f"proteção: {protecao_padrao().nome}" + (" (cifrado e lido de volta)" if ok else ""),
+           "fora do Windows o cofre não é cifrado" if protecao_padrao().nome != "dpapi" else "a DPAPI falhou: avise")
+    banco = Banco(pasta / "connect.db")
+    falas = []
+    mo = m.Motor(banco, {"anunciar": lambda t, f="": falas.append(t)}, cfg)
+    auto = mo.criar("Diagnóstico", {"gatilho": {"tipo": "manual"},
+                                    "acoes": [{"tipo": "criar_tarefa", "params": {"titulo": "tarefa {data}"}},
+                                              {"tipo": "avisar", "params": {"texto": "ok"}, "paralelo": True}]})
+    mo.rodar_agora(auto["id"])
+    ex = banco.execucoes(auto["id"])[0]
+    r.item("motor de automações", ex["status"] == "ok" and len(banco.tarefas()) == 1 and falas == ["[automação Diagnóstico] ok"],
+           f"execução {ex['status']}, {len(banco.tarefas())} tarefa criada, aviso {'dado' if falas else 'NÃO dado'}")
+    try:
+        m.validar_fluxo({"gatilho": {"tipo": "manual"}, "acoes": [{"tipo": "whatsapp", "params": {
+            "para": "5511900000000", "texto": "{resultado.x}"}}]})
+        r.item("política de envio", False, "aceitou texto de IA para terceiro", "falha de segurança: avise")
+    except ValueError:
+        r.item("política de envio", True, "texto variável para terceiros é recusado")
+    import urllib.request
+    porta = int((cfg.get("connect", {}) or {}).get("porta_webhooks", 8766))
+    try:
+        urllib.request.urlopen(f"http://127.0.0.1:{porta}/saude", timeout=2).read()
+        r.item("servidor de webhooks", True, f"respondendo em 127.0.0.1:{porta}")
+    except Exception:
+        r.item("servidor de webhooks", None, f"nada em 127.0.0.1:{porta}", "ele sobe junto com o Jarvis (main.py); "
+               "rode o diagnóstico com o Jarvis aberto para testar")
+    from jarvis.connect.conectores import catalogo
+    for c in catalogo(None, cofre(), cfg):
+        if c["situacao"] == "implementado" and c["id"] in ("evolution", "gmail", "agenda", "claude", "ollama"):
+            r.item(f"integração: {c['nome']}", {"conectado": True, "erro": False}.get(c["estado"]),
+                   f"{c['estado']}" + (f" ({c['detalhe']})" if c["detalhe"] else ""), c["requisitos"][:160])
 
 
 def main(argv=None):
@@ -456,6 +500,7 @@ def main(argv=None):
                   ("internet", lambda: testar_internet(cfg, r, args.url)),
                   ("voz", lambda: comparar_vozes(cfg, r, args.ouvir) if args.comparar else testar_voz(cfg, r, args.ouvir)),
                   ("acoes", lambda: testar_acoes(cfg, r, args.abrir, pasta)),
+                  ("connect", lambda: testar_connect(cfg, r, pasta)),
                   ("cerebro", lambda: testar_cerebro(cfg, r, pasta))]
         for nome, etapa in etapas:
             if nome not in partes:

@@ -87,6 +87,32 @@ def iniciar_guardiao(cfg, ctl):
     return guardiao
 
 
+def iniciar_connect(cfg, ctl):
+    """JARVIS Connect (jarvis/connect): tarefas, automações, integrações e a Central na HUD. Um extra: se falhar,
+    o Jarvis segue sem ele."""
+    c = cfg.get("connect", {}) or {}
+    if not c.get("ativo", True):
+        return None
+    try:
+        from jarvis.connect import motor, rede, servicos, webhooks
+        from jarvis.connect.banco import Banco
+        from jarvis.connect.central import Central
+        from jarvis.connect.cofre import cofre
+        banco = Banco()
+        rede.ligar_banco(banco)
+        mo = motor.Motor(banco, servicos.todos(cfg), cfg, emitir=lambda **k: bus.emitir("connect"))
+        mo.iniciar()
+        ctl.central = Central(mo, cofre())
+        if c.get("webhooks", True):
+            porta = webhooks.iniciar(mo, cofre(), banco, porta=int(c.get("porta_webhooks", webhooks.PORTA)))
+            print(f"[connect] webhooks em http://127.0.0.1:{porta}")
+        banco.evento("sistema", "JARVIS Connect ligado")
+        return mo
+    except Exception as e:
+        print(f"[connect] não consegui iniciar: {type(e).__name__}: {e}")
+        return None
+
+
 def iniciar_hud(cfg, ctl, silencioso: bool):
     """Sobe o servidor da HUD, a janela e a bandeja. Retorna (servidor, ícone) ou (None, None)."""
     h = cfg.get("hud", {})
@@ -226,6 +252,7 @@ def modo_voz(cfg, silencioso: bool):
     if reflexao:
         reflexao.consolidador.keep_alive = lambda: cerebro.local.keep_alive
     iniciar_guardiao(cfg, ctl)
+    iniciar_connect(cfg, ctl)
     bus.emitir("estado", estado="iniciando", detalhe="Carregando o modelo de linguagem…")
     aquecer_ou_sair(cerebro, cfg)
     ctl.enviar_cerebro()
@@ -351,6 +378,7 @@ def modo_texto(cfg, falar: bool, silencioso: bool):
     if reflexao:
         reflexao.consolidador.keep_alive = lambda: cerebro.local.keep_alive
     iniciar_guardiao(cfg, ctl)
+    iniciar_connect(cfg, ctl)
     bus.emitir("estado", estado="iniciando", detalhe="Carregando o modelo de linguagem…")
     aquecer_ou_sair(cerebro, cfg)
     ctl.enviar_cerebro()

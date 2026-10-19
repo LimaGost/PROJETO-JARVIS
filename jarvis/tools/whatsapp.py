@@ -57,6 +57,18 @@ def _avaliar(args: dict) -> Avaliacao:
     return Avaliacao(Nivel.CONFIRMAR, f"mandar no WhatsApp para {nome} (+{numero}): \"{trecho}\"")
 
 
+def _evolution():
+    """Cliente da Evolution se ela está configurada e pareada; senão None (usa o app do Windows)."""
+    try:
+        from jarvis.connect.conectores import instancia
+        c = instancia("evolution")
+        if c.configurado() and c.status().estado == "conectado":
+            return c.cliente()
+    except Exception:
+        pass
+    return None
+
+
 def _janela_do_whatsapp():
     from jarvis.tools import interface
     interface._exigir()
@@ -75,16 +87,25 @@ def _janela_do_whatsapp():
 
 @ferramenta(
     "whatsapp_enviar",
-    "Manda uma mensagem no WhatsApp do usuário (app do Windows). 'contato' = nome de um contato do Google ou "
+    "Manda uma mensagem no WhatsApp do usuário (pela Evolution, se ligada; senão pelo app do Windows). "
+    "'contato' = nome de um contato do Google ou "
     "telefone com DDD. Sempre pede confirmação.",
     {"contato": {"type": "string"}, "mensagem": {"type": "string"}},
     obrigatorios=("contato", "mensagem"),
     avaliar=_avaliar, so_claude=True,
 )
 def whatsapp_enviar(contato: str, mensagem: str) -> str:
+    nome, numero = resolver(contato)
+    evolution = _evolution()
+    if evolution is not None:                 # Evolution ligada (Central): manda direto, sem depender da janela
+        try:
+            evolution.enviar_texto(numero, mensagem.strip())
+            return f"Mensagem enviada no WhatsApp para {nome} (+{numero}), pela Evolution."
+        except Exception as e:
+            if not hasattr(os, "startfile"):
+                raise ErroFerramenta(f"a Evolution não enviou ({e}); a mensagem NÃO foi enviada")
     if not hasattr(os, "startfile"):
         raise ErroFerramenta("o envio pelo WhatsApp só funciona no Windows")
-    nome, numero = resolver(contato)
     url = "whatsapp://send?" + urllib.parse.urlencode({"phone": numero, "text": mensagem.strip()},
                                                       quote_via=urllib.parse.quote)
     try:

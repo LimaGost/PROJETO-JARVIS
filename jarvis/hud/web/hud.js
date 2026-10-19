@@ -208,6 +208,9 @@ function aplicar(ev) {
     case "nivel": S.nivel = { mic: ev.mic || 0, voz: ev.voz || 0 }; break;
     case "stats": aplicarStats(ev); break;
     case "cerebro": S.cerebro = ev; renderCerebros(); break;
+    case "central": if (typeof Central !== "undefined") Central.receber(ev); break;          // respostas da Central (JARVIS Connect)
+    case "connect": if (typeof Central !== "undefined") Central.mudou(); break;              // algo mudou no motor de automações
+    case "central_abrir": if (typeof Central !== "undefined") Central.abrir(ev.secao); break;
   }
 }
 
@@ -985,7 +988,7 @@ $("busca-memoria").addEventListener("input", renderMemoria);
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (S.pendente != null) responderConfirmacao(false); else enviar({ tipo: "parar" });
-  } else if (e.key === "/" && document.activeElement !== $("entrada") && document.activeElement !== $("busca-memoria")) {
+  } else if (e.key === "/" && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || "")) {
     e.preventDefault(); $("entrada").focus();
   }
 });

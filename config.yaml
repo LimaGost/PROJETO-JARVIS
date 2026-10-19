@@ -43,6 +43,14 @@ hud:
   bandeja: true           # ícone na bandeja do Windows
   tema: ciano             # ciano = o visual do Jarvis (padrão) | dourado = variação âmbar, opcional
 
+connect:                  # JARVIS Connect: Central na HUD, tarefas, automações e integrações (jarvis/connect, docs/CONNECT.md)
+  ativo: true
+  webhooks: true          # servidor SÓ de webhooks em 127.0.0.1 (o túnel da Cloudflare aponta só para ele; a HUD fica fechada)
+  porta_webhooks: 8766
+  meu_whatsapp: ""        # seu número com DDD (ex.: 11987654321): o "eu" das automações ("me manda no WhatsApp")
+  meu_email: ""           # seu e-mail: o "eu" das automações por e-mail
+                          # chaves (Evolution etc.) NUNCA aqui: vão pela Central para o cofre criptografado
+
 recursos:                 # Jarvis ligado o tempo todo sem pesar no jogo (jarvis/recursos.py)
   modo_jogo_automatico: true   # GPU ocupada por outro programa: tira Qwen e embeddings do Ollama e segura a reflexão
   gpu_jogo_pct: 50             # uso da GPU (%) que conta como jogo/programa pesado

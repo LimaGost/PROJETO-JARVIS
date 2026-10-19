@@ -27,9 +27,15 @@ CLIENTE = PASTA / "cliente.json"
 TOKEN = PASTA / "token.json"
 AUTORIZAR = "https://accounts.google.com/o/oauth2/v2/auth"
 TROCAR = "https://oauth2.googleapis.com/token"
-# o mínimo para o que o Jarvis faz: ler e enviar e-mail (não apaga), eventos da agenda e ler contatos
-ESCOPOS = ("https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send "
-           "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/contacts.readonly")
+REVOGAR = "https://oauth2.googleapis.com/revoke"
+# o mínimo para o que o Jarvis faz: ler e enviar e-mail (não apaga), eventos da agenda e ler contatos.
+# Cada serviço pede só o dele (autorização incremental): conectar a Agenda pela Central não pede o Gmail.
+ESCOPOS_POR_SERVICO = {
+    "gmail": ("https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.send"),
+    "agenda": ("https://www.googleapis.com/auth/calendar.events",),
+    "contatos": ("https://www.googleapis.com/auth/contacts.readonly",),
+}
+ESCOPOS = " ".join(e for s in ("gmail", "agenda", "contatos") for e in ESCOPOS_POR_SERVICO[s])
 COMANDO = "python -m jarvis.tools.google_api"
 
 
@@ -57,8 +63,37 @@ def _salvar(tok: dict, antigo: dict | None = None):
     TOKEN.write_text(json.dumps(tok), encoding="utf-8")
 
 
-def autorizar():
-    """Abre o navegador para o login e guarda o token. Roda uma vez."""
+def escopos_concedidos() -> set[str]:
+    """Escopos que o token atual tem (vazio se não autorizou)."""
+    try:
+        return set((json.loads(TOKEN.read_text(encoding="utf-8")).get("scope") or "").split())
+    except (OSError, ValueError):
+        return set()
+
+
+def tem_servico(servico: str) -> bool:
+    return set(ESCOPOS_POR_SERVICO[servico]) <= escopos_concedidos()
+
+
+def revogar() -> bool:
+    """Desconecta a conta Google: revoga o token no Google e apaga o arquivo local."""
+    try:
+        tok = json.loads(TOKEN.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    alvo = tok.get("refresh_token") or tok.get("access_token")
+    try:
+        urllib.request.urlopen(urllib.request.Request(REVOGAR, urllib.parse.urlencode({"token": alvo}).encode(),
+                                                      {"Content-Type": "application/x-www-form-urlencoded"}), timeout=10)
+    except Exception:
+        pass                       # mesmo sem rede, o token local some (e vence sozinho no Google)
+    TOKEN.unlink(missing_ok=True)
+    return True
+
+
+def autorizar(servicos: tuple[str, ...] | None = None, abrir=webbrowser.open):
+    """Abre o navegador para o login e guarda o token. Sem `servicos`: Gmail, Agenda e Contatos."""
+    escopos = " ".join(e for s in servicos for e in ESCOPOS_POR_SERVICO[s]) if servicos else ESCOPOS
     c = _cliente()
     with socket.socket() as s:            # o Google aceita qualquer porta no 127.0.0.1 para app de computador
         s.bind(("127.0.0.1", 0))
@@ -68,9 +103,9 @@ def autorizar():
     desafio = base64.urlsafe_b64encode(hashlib.sha256(verificador.encode()).digest()).rstrip(b"=").decode()
     estado = secrets.token_urlsafe(16)
     url = AUTORIZAR + "?" + urllib.parse.urlencode({
-        "client_id": c["client_id"], "response_type": "code", "redirect_uri": redirect, "scope": ESCOPOS,
+        "client_id": c["client_id"], "response_type": "code", "redirect_uri": redirect, "scope": escopos,
         "code_challenge_method": "S256", "code_challenge": desafio, "state": estado,
-        "access_type": "offline", "prompt": "consent"})
+        "access_type": "offline", "prompt": "consent", "include_granted_scopes": "true"})
     recebido: dict = {}
 
     class Handler(BaseHTTPRequestHandler):
@@ -85,13 +120,13 @@ def autorizar():
             pass
 
     servidor = HTTPServer(("127.0.0.1", porta), Handler)
-    print("Abrindo o navegador para autorizar o Google (Gmail, Agenda e Contatos)...")
-    webbrowser.open(url)
+    print("Abrindo o navegador para autorizar o Google...")
+    abrir(url)
     servidor.timeout = 300
     servidor.handle_request()
     servidor.server_close()
     if recebido.get("state") != estado or "code" not in recebido:
-        raise SystemExit(f"Autorização falhou: {recebido.get('error', 'sem resposta')}")
+        raise ErroFerramenta(f"a autorização do Google falhou ({recebido.get('error', 'sem resposta')})")
     _salvar(_post_token({"grant_type": "authorization_code", "code": recebido["code"], "redirect_uri": redirect,
                          "code_verifier": verificador}))
     print("Pronto. Token salvo em", TOKEN)
@@ -183,4 +218,7 @@ def um_contato(nome: str, campo: str) -> tuple[str, str]:
 
 
 if __name__ == "__main__":
-    autorizar()
+    try:
+        autorizar()
+    except ErroFerramenta as e:
+        raise SystemExit(str(e))
