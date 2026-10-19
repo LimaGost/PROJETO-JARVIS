@@ -50,7 +50,7 @@ def test_skill_invalida_e_recusada(texto):
 
 def test_habilidades_que_vem_com_o_jarvis_sao_validas():
     nomes = {h["nome"] for h in hab.todas()}
-    assert {"estudo-guiado", "triagem-de-email"} <= nomes
+    assert {"estudo-guiado", "triagem-de-email", "depuracao-sistematica", "verificar-antes-de-concluir"} <= nomes
 
 
 def test_contexto_mostra_so_nome_e_descricao(pasta):
@@ -134,6 +134,93 @@ def test_instalar_sempre_confirma_e_instala_o_que_foi_mostrado(pasta, tmp_path, 
     assert baixados.count(baixados[0]) == 2       # 1 por confirmação; a instalação usa o texto já conferido
 
 
+def _github_falso(arquivos: dict[str, bytes], skill: str = SKILL_PDF, pasta: str = "skills/pdf"):
+    """Simula raw.githubusercontent + API de conteúdo do GitHub para uma pasta de skill."""
+    import json
+    pedidos = []
+
+    def baixar(u):
+        pedidos.append(u)
+        if "raw.githubusercontent.com" in u:
+            if u.split("/", 6)[-1] == f"{pasta}/SKILL.md":
+                return skill.encode(), "text/plain", u
+            raise ErroFerramenta("o site respondeu com erro 404")
+        if u.startswith("https://api.github.com/"):
+            caminho = u.split("/contents/", 1)[1].split("?")[0]
+            itens = []
+            for rel, dados in arquivos.items():
+                completo = f"{pasta}/{rel}"
+                if completo.rsplit("/", 1)[0] == caminho:
+                    itens.append({"path": completo, "type": "file", "size": len(dados), "download_url": "dl:" + completo})
+            dirs = {f"{pasta}/{r.split('/')[0]}" for r in arquivos if "/" in r}
+            itens += [{"path": d, "type": "dir"} for d in dirs if d.rsplit("/", 1)[0] == caminho]
+            return json.dumps(itens).encode(), "application/json", u
+        if u.startswith("dl:"):
+            return arquivos[u[3 + len(pasta) + 1:]], "text/plain", u
+        raise AssertionError(u)
+    return baixar, pedidos
+
+
+def test_instala_a_pasta_inteira_mas_nao_os_scripts(pasta, tmp_path, monkeypatch):
+    baixar, _ = _github_falso({"reference.md": b"guia de apoio", "forms/campos.md": b"campos",
+                               "scripts/extrair.py": b"import os", "logo.png": b"\x89PNG"})
+    monkeypatch.setattr(leitura, "baixar", baixar)
+    ex, perguntas = executor(tmp_path, [True])
+    r = ex.executar("instalar_habilidade", {"url": "https://github.com/anthropics/skills/tree/main/skills/pdf"})
+    assert "2 arquivos de texto de apoio" in perguntas[0] and "ficam de fora" in perguntas[0]
+    assert "com 2 arquivos de apoio" in r and "scripts/extrair.py" in r
+    assert (pasta / "pdf" / "reference.md").read_text(encoding="utf-8") == "guia de apoio"
+    assert (pasta / "pdf" / "forms" / "campos.md").exists() and not (pasta / "pdf" / "scripts").exists()
+    assert REGISTRO["ler_arquivo_habilidade"].funcao(nome="pdf", arquivo="forms/campos.md") == "campos"
+
+
+def test_instala_pelo_id_do_catalogo_procurando_a_pasta(pasta, tmp_path, monkeypatch):
+    baixar, pedidos = _github_falso({}, pasta="find-skills")
+    monkeypatch.setattr(leitura, "baixar", baixar)
+    ex, _ = executor(tmp_path, [True])
+    assert "instalada" in ex.executar("instalar_habilidade", {"url": "vercel-labs/skills/find-skills"})
+    tentados = [u for u in pedidos if u.endswith("SKILL.md")]
+    assert tentados[0].endswith("HEAD/skills/find-skills/SKILL.md") and tentados[1].endswith("HEAD/find-skills/SKILL.md")
+    assert any(u.startswith("https://api.github.com/repos/vercel-labs/skills/contents/find-skills") for u in pedidos)
+
+
+@pytest.mark.parametrize("fonte,primeiro", [
+    ("anthropics/skills/pdf", "https://raw.githubusercontent.com/anthropics/skills/HEAD/skills/pdf/SKILL.md"),
+    ("https://skills.sh/obra/superpowers/systematic-debugging",
+     "https://raw.githubusercontent.com/obra/superpowers/HEAD/skills/systematic-debugging/SKILL.md"),
+    ("https://exemplo.com/minha/SKILL.md", "https://exemplo.com/minha/SKILL.md"),
+])
+def test_candidatos(fonte, primeiro):
+    assert hab.candidatos(fonte)[0][0] == primeiro
+
+
+def test_caminho_malicioso_da_api_nao_sai_da_pasta(pasta, tmp_path, monkeypatch):
+    skill = {"meta": {"name": "pdf", "description": "Use para PDFs e coisas assim."}, "corpo": "x",
+             "fonte": "f", "apoio": {"../../fora.md": "mal", "ok.md": "bom"}, "ignorados": []}
+    hab._baixadas["u"] = skill
+    hab.instalar_habilidade("u")
+    assert (pasta / "pdf" / "ok.md").exists() and not (tmp_path / "fora.md").exists()
+
+
+def test_buscar_no_catalogo_ordena_por_instalacoes(monkeypatch):
+    import json
+    pedidos = []
+    resposta = {"skills": [
+        {"id": "fulano/x/pdf-tool", "name": "pdf-tool", "installs": 40, "source": "fulano/x"},
+        {"id": "anthropics/skills/pdf", "name": "pdf", "installs": 125000, "source": "anthropics/skills"}]}
+    monkeypatch.setattr(leitura, "baixar", lambda u: pedidos.append(u) or (json.dumps(resposta).encode(), "", u))
+    r = REGISTRO["buscar_habilidade"].funcao(assunto="pdf files")
+    assert pedidos[0] == "https://skills.sh/api/search?q=pdf+files&limit=12"
+    assert r.index("anthropics/skills/pdf") < r.index("fulano/x/pdf-tool") and "125.000 instalações" in r
+    assert "fonte oficial" in r.split("\n")[1] and "não confiável" in r
+    assert REGISTRO["buscar_habilidade"].externo and REGISTRO["buscar_habilidade"].so_claude
+
+
+def test_buscar_sem_resultado(monkeypatch):
+    monkeypatch.setattr(leitura, "baixar", lambda u: (b'{"skills": []}', "", u))
+    assert "Não achei" in REGISTRO["buscar_habilidade"].funcao(assunto="zzz")
+
+
 def test_link_que_nao_e_skill_e_recusado(pasta, tmp_path, monkeypatch):
     monkeypatch.setattr(leitura, "baixar", lambda u: (b"<html>pagina</html>", "text/html", u))
     ex, perguntas = executor(tmp_path, [])
@@ -142,7 +229,7 @@ def test_link_que_nao_e_skill_e_recusado(pasta, tmp_path, monkeypatch):
 
 def test_ferramentas_de_habilidade_so_para_o_claude():
     for nome in ("usar_habilidade", "ler_arquivo_habilidade", "criar_habilidade", "instalar_habilidade",
-                 "listar_habilidades", "esquecer_habilidade"):
+                 "listar_habilidades", "esquecer_habilidade", "buscar_habilidade"):
         assert REGISTRO[nome].so_claude
 
 

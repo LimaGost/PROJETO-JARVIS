@@ -228,9 +228,16 @@ Procedimentos que ele aprende e segue, na pasta `habilidades/`, no mesmo formato
 - **Usar:** a cada pedido o Claude vê só nome + descrição de cada habilidade (~100 tokens cada, a "revelação progressiva"
   das Skills) e carrega o passo a passo com `usar_habilidade` quando a tarefa combina. Dá para ter dezenas.
 - **Instalar de um link:** "instala a habilidade deste link" com uma pasta do GitHub (ex.:
-  `https://github.com/anthropics/skills/tree/main/skills/pdf`) — sempre 🔴, mostrando nome e descrição antes. Ou copie a
-  pasta para `habilidades/`.
-- **Já vêm duas:** `estudo-guiado` (aprender um assunto por partes, com perguntas e exercício) e `triagem-de-email`.
+  `https://github.com/anthropics/skills/tree/main/skills/pdf`) ou o id do catálogo (`anthropics/skills/pdf`) — sempre 🔴,
+  mostrando nome, descrição e quantos arquivos vêm junto. Baixa a pasta inteira (textos de apoio como `reference.md`,
+  pela API pública do GitHub); scripts e binários ficam de fora. Ou copie a pasta para `habilidades/`.
+- **Procurar no catálogo:** "tem alguma habilidade para PDF?" — `buscar_habilidade` consulta o
+  [skills.sh](https://skills.sh) (catálogo aberto, +100 mil skills, a ideia do *find-skills* da Vercel) e mostra as
+  melhores por instalações, marcando fontes conhecidas. Só instala se você pedir.
+- **Já vêm quatro:** `estudo-guiado` (aprender um assunto por partes, com perguntas e exercício), `triagem-de-email`,
+  `depuracao-sistematica` (achar a causa raiz antes de corrigir) e `verificar-antes-de-concluir` (só dizer "pronto"
+  com prova) — as duas últimas adaptadas de [obra/superpowers](https://github.com/obra/superpowers) (MIT). As mesmas
+  regras vão resumidas nas instruções do `programar`.
 - **Segurança:** scripts que venham com uma skill nunca são executados (ele só lê texto); ações continuam passando
   pelas permissões; depois de ler um site, criar habilidade pede confirmação (um site não planta procedimento).
 - Outras ferramentas: `listar_habilidades`, `ler_arquivo_habilidade` (pasta `references/`), `esquecer_habilidade`

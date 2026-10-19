@@ -66,5 +66,5 @@ for linha in sys.stdin:
             {"type": "tool_use", "id": "t1", "name": "mcp__jarvis__hora_data", "input": {}}]}})
         texto("Olá, senhor. ")
         texto("Tudo bem")
-        texto(" por aqui. ECO" + recebido.replace("\n", " ")[:600])
+        texto(" por aqui. ECO" + recebido.replace("\n", " ")[:6000])
         resultado("Olá, senhor. Tudo bem por aqui.")
