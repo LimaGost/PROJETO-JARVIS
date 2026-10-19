@@ -15,6 +15,7 @@ comtypes
 ddgs
 send2trash
 pypdf
+youtube-transcript-api
 # fase 4: HUD e controle de interface
 fastapi
 uvicorn[standard]

@@ -40,7 +40,8 @@ def _ler(fonte: str) -> tuple[str, str, str]:
 
 @ferramenta(
     "ler_documento",
-    "Lê o texto de uma página da internet, PDF, Google Docs público ou arquivo deste computador (txt, md, pdf, docx). "
+    "Lê o texto de uma página da internet, PDF, Google Docs público, vídeo do YouTube (pela legenda) ou arquivo "
+    "deste computador (txt, md, pdf, docx). "
     "Documento longo vem em partes: chame de novo com parte=2, 3... até ler o que precisa.",
     {"fonte": {"type": "string", "description": "Endereço (https://...) ou caminho do arquivo"},
      "parte": {"type": "integer", "description": "Padrão 1"}},
@@ -59,7 +60,8 @@ def ler_documento(fonte: str, parte: int = 1) -> str:
 
 @ferramenta(
     "aprender",
-    "Estuda um documento (página, PDF, Google Docs público ou arquivo deste PC) e guarda na base de conhecimento "
+    "Estuda um documento (página, PDF, Google Docs público, vídeo do YouTube ou arquivo deste PC) e guarda na base "
+    "de conhecimento "
     "local, para consultar depois com consultar_conhecimento. Use quando o usuário pedir para aprender, estudar, "
     "guardar ou ficar bom em algum conteúdo. Estudar de novo a mesma fonte atualiza a versão guardada.",
     {"fonte": {"type": "string", "description": "Endereço (https://...) ou caminho do arquivo"},

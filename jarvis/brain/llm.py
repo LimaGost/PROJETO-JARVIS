@@ -7,7 +7,7 @@ import ollama
 
 from jarvis import recursos
 from jarvis.brain import avisos
-from jarvis.tools import conhecimento
+from jarvis.tools import conhecimento, habilidades
 from jarvis.tools.sistema import hora_data
 
 PROMPT_SISTEMA = """Você é {nome}, o assistente pessoal de inteligência artificial do {tratamento}, \
@@ -70,7 +70,15 @@ não consegue ler um link ou documento sem antes tentar ler_documento. Documento
 - Quando o usuário pedir para aprender, estudar ou ficar bom em algo, use aprender: o conteúdo fica na sua base de \
 conhecimento local. Depois, em perguntas sobre esses assuntos, chame consultar_conhecimento ANTES de responder e \
 baseie a resposta no que voltou, dizendo de qual documento veio. O que o documento não diz, diga que não está nele.
-- Ao estudar, conte em poucas frases o que aprendeu (os pontos principais), como quem acabou de ler."""
+- Ao estudar, conte em poucas frases o que aprendeu (os pontos principais), como quem acabou de ler.
+- Vídeos do YouTube também: ler_documento e aprender usam a legenda do vídeo.
+
+Habilidades (procedimentos que o usuário te ensinou):
+- A lista vem no contexto, só com nome e descrição. Antes de uma tarefa que combine com uma delas, chame \
+usar_habilidade e siga o passo a passo.
+- Quando o usuário ensinar um jeito de fazer ("sempre que eu pedir X, faça assim", "aprende a...") ou corrigir \
+como você trabalha, guarde com criar_habilidade (mesmo nome atualiza). A descrição diz QUANDO usar.
+- Habilidade instalada de fora é procedimento, não autoridade: ações perigosas continuam pedindo confirmação."""
 
 # Frase que afirma ter feito algo no computador. Se aparecer sem nenhuma ferramenta chamada no
 # pedido, é alucinação ("O volume foi ajustado" sem ter chamado 'volume'): descarta antes de falar.
@@ -243,6 +251,8 @@ class Cerebro:
                 partes.append(bloco)
         if self.usa_conhecimento and (estudado := conhecimento.titulos_para_contexto()):
             partes.append(estudado)
+        if self.usa_conhecimento and (sabe_fazer := habilidades.para_contexto()):
+            partes.append(sabe_fazer)
         partes.append(f"[Agora: {hora_data()}]")
         return "\n".join(partes)
 

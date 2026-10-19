@@ -219,6 +219,26 @@ e ele responde **a partir do que estudou**, dizendo de qual documento veio.
   confirmação). Ele **nunca** acessa endereços da rede local (127.0.0.1, 192.168..., roteador), nem por redirecionamento.
 - O banco é só seu e fica fora do git. Para ver o que tem: "o que você já estudou?".
 
+## Habilidades: ensinar o Jarvis a fazer as coisas do seu jeito (formato Claude Skills)
+Procedimentos que ele aprende e segue, na pasta `habilidades/`, no mesmo formato das **Claude Skills** (`SKILL.md` com
+`name` e `description` no cabeçalho + o passo a passo). Compatível com as skills da Anthropic e da lista
+[awesome-claude-skills](https://github.com/ComposioHQ/awesome-claude-skills).
+- **Ensinar por voz:** "Jarvis, aprende: sempre que eu pedir o fechamento de caixa, faça assim..." vira uma habilidade
+  (`criar_habilidade`, 🟡; mesmo nome atualiza). Corrigiu o jeito dele trabalhar? Ele atualiza a habilidade.
+- **Usar:** a cada pedido o Claude vê só nome + descrição de cada habilidade (~100 tokens cada, a "revelação progressiva"
+  das Skills) e carrega o passo a passo com `usar_habilidade` quando a tarefa combina. Dá para ter dezenas.
+- **Instalar de um link:** "instala a habilidade deste link" com uma pasta do GitHub (ex.:
+  `https://github.com/anthropics/skills/tree/main/skills/pdf`) — sempre 🔴, mostrando nome e descrição antes. Ou copie a
+  pasta para `habilidades/`.
+- **Já vêm duas:** `estudo-guiado` (aprender um assunto por partes, com perguntas e exercício) e `triagem-de-email`.
+- **Segurança:** scripts que venham com uma skill nunca são executados (ele só lê texto); ações continuam passando
+  pelas permissões; depois de ler um site, criar habilidade pede confirmação (um site não planta procedimento).
+- Outras ferramentas: `listar_habilidades`, `ler_arquivo_habilidade` (pasta `references/`), `esquecer_habilidade`
+  (vai para `data/habilidades_apagadas/`).
+
+**Vídeos do YouTube:** "estuda esse vídeo" — `ler_documento` e `aprender` usam a legenda (manual ou automática, em
+português se houver) via `youtube-transcript-api`.
+
 ## Gmail, Agenda e WhatsApp (só com o Claude como cérebro)
 "Tenho e-mail novo?", "lê o e-mail da Ana", "responde que eu confirmo", "o que tenho amanhã?", "marca dentista
 sexta às 15h", "manda no WhatsApp pra Maria que eu chego às 8". Configuração no passo 8 da instalação.

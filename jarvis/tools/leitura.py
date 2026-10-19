@@ -194,9 +194,54 @@ def extrair(dados: bytes, tipo: str, nome: str) -> tuple[str, str]:
     return _arrumar(_decodificar(dados)), ""
 
 
+_YOUTUBE = re.compile(r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|live/|embed/)|youtu\.be/)([\w-]{11})")
+
+
+def id_youtube(url: str) -> str | None:
+    m = _YOUTUBE.search(url)
+    return m.group(1) if m else None
+
+
+def texto_youtube(url: str, video: str) -> tuple[str, str, str]:
+    """Vídeo do YouTube -> a legenda (manual ou automática), em português se houver. Precisa do youtube-transcript-api."""
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+    except ImportError:
+        raise ErroFerramenta("para ler vídeos do YouTube falta a biblioteca youtube-transcript-api "
+                             "(pip install -r requirements.lock)")
+    try:
+        trechos = YouTubeTranscriptApi().fetch(video, languages=["pt-BR", "pt", "en"])
+        linhas = [t.text.replace("\n", " ").strip() for t in trechos]
+    except Exception as e:
+        raise ErroFerramenta(f"esse vídeo não tem legenda que eu consiga ler ({type(e).__name__})")
+    texto = re.sub(r"\s+", " ", " ".join(l for l in linhas if l and l not in ("[Música]", "[Music]"))).strip()
+    if not texto:
+        raise ErroFerramenta("a legenda desse vídeo está vazia")
+    titulo = f"Vídeo do YouTube {video}"
+    try:                                           # título pelo oEmbed público; sem ele, fica o id
+        import json
+        dados, _, _ = baixar(f"https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v={video}")
+        info = json.loads(dados)
+        titulo = f"{info.get('title', titulo)} ({info.get('author_name', 'YouTube')})"
+    except Exception:
+        pass
+    # frases longas sem pontuação viram parágrafos de ~800 caracteres: melhor para dividir em trechos depois
+    paragrafos, atual = [], ""
+    for palavra in texto.split(" "):
+        atual = f"{atual} {palavra}".strip()
+        if len(atual) > 800 and atual.endswith((".", "?", "!")) or len(atual) > 1200:
+            paragrafos.append(atual)
+            atual = ""
+    if atual:
+        paragrafos.append(atual)
+    return "\n\n".join(paragrafos), titulo, f"https://www.youtube.com/watch?v={video}"
+
+
 def ler(fonte: str) -> tuple[str, str, str]:
-    """(texto, título, origem) de um endereço da internet ou de um arquivo deste computador."""
+    """(texto, título, origem) de um endereço da internet, vídeo do YouTube ou arquivo deste computador."""
     fonte = fonte.strip().strip('"')
+    if (video := id_youtube(fonte)) is not None:
+        return texto_youtube(fonte, video)
     local = None
     if not re.match(r"(?i)^https?://", fonte):
         try:
