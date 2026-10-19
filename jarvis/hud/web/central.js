@@ -7,6 +7,7 @@ const Central = (() => {
   const C = { aberta: false, secao: "painel", pedidos: new Map(), seq: 0, dados: {}, filtro: { busca: "", cat: "", sit: "" },
               statusTarefa: "pendente", meta: null, timerMudou: null };
   const ROTULOS = { painel: "Painel", integracoes: "Integrações", tarefas: "Tarefas", automacoes: "Automações" };
+  const EXTRAS = {};          // abas registradas por outros módulos (ex.: AI Command Center em orquestra.js)
   const ICONE_ABA = { painel: "layout-dashboard", integracoes: "blocks", tarefas: "list-todo", automacoes: "workflow" };
   const SITUACAO = { implementado: "Implementado", em_desenvolvimento: "Em desenvolvimento", planejado: "Planejado" };
   const ESTADO = { conectado: "Conectado", desconectado: "Desconectado", erro: "Erro", aguardando: "Aguardando" };
@@ -107,7 +108,8 @@ const Central = (() => {
     const corpo = $c("c-corpo");
     if (!silencioso) corpo.replaceChildren(h("div", { class: "c-vazio" }, icone("loader-circle", "gira"), " Carregando…"));
     try {
-      if (secao === "painel") renderPainel(await pedir("painel"));
+      if (EXTRAS[secao]) await EXTRAS[secao](api, silencioso);
+      else if (secao === "painel") renderPainel(await pedir("painel"));
       else if (secao === "integracoes") renderIntegracoes(await pedir("integracoes"));
       else if (secao === "tarefas") renderTarefas(await pedir("tarefas", { status: C.statusTarefa }));
       else renderAutomacoes(await pedir("automacoes"));
@@ -536,6 +538,16 @@ const Central = (() => {
   }
   function fecharModal() { $c("c-modal").hidden = true; $c("c-caixa").replaceChildren(); }
 
+  /* ---------------- extensões: outros módulos ganham abas próprias na Central */
+  function registrarAba(id, rotulo, ic, carregarAba) {
+    ROTULOS[id] = rotulo; ICONE_ABA[id] = ic; EXTRAS[id] = carregarAba;
+    document.querySelector("#central .c-abas").append(h("button", { type: "button", class: "c-aba", role: "tab",
+      id: "c-aba-" + id, "aria-selected": "false", onclick: () => mostrar(id) }, icone(ic), rotulo,
+      h("span", { class: "n", id: "c-n-" + id, hidden: true })));
+  }
+  const api = { h, pedir, secao, botao, abrirModal, fecharModal, quando, erro, contador, $c,
+                aberta: () => C.aberta, secaoAtual: () => C.secao, recarregar: (s) => carregar(s || C.secao, true) };
+
   montar();
-  return { abrir, fechar, receber, mudou, carregar };
+  return { abrir, fechar, receber, mudou, carregar, registrarAba, api };
 })();

@@ -16,3 +16,4 @@ data/claude_cli/
 data/preferencias.json
 .venv-voz/
 .venv-qwen3/
+data/orquestra/

@@ -24,6 +24,7 @@ class Central:
     def __init__(self, motor: m.Motor, cofre):
         self.motor, self.banco, self.cofre = motor, motor.banco, cofre
         self._cache: tuple[float, list] | None = None
+        self.orquestra = None            # jarvis.orquestra.painel.PainelOrquestra (ops "orq_*" do AI Command Center)
 
     def _catalogo(self) -> list[dict]:
         if self._cache is None or time.monotonic() - self._cache[0] > CACHE_S:
@@ -32,6 +33,8 @@ class Central:
 
     def tratar(self, pedido: dict) -> dict:
         op = str(pedido.get("op", ""))
+        if op.startswith("orq_") and self.orquestra is not None:
+            return self.orquestra.tratar(pedido)
         resposta = {"tipo": "central", "op": op, "pedido": pedido.get("pedido")}
         metodo = getattr(self, "op_" + op, None) if op.isidentifier() else None
         if metodo is None:

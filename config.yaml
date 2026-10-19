@@ -51,6 +51,34 @@ connect:                  # JARVIS Connect: Central na HUD, tarefas, automaçõe
   meu_email: ""           # seu e-mail: o "eu" das automações por e-mail
                           # chaves (Evolution etc.) NUNCA aqui: vão pela Central para o cofre criptografado
 
+orquestra:                # AI Command Center: o Jarvis coordena agentes de IA (jarvis/orquestra, docs/ORQUESTRA.md)
+  ativo: true
+  modo: supervisionado    # automatico | supervisionado (mostra o plano e espera) | manual. Troque na Central ou por voz
+  max_passos_paralelos: 3
+  limite_passo_s: 1200    # um passo de agente não passa disso (sem contar o tempo pausado)
+  memoria_max_mb: 4096    # processo de agente (com os filhos) que passar disso é encerrado
+  reparos_de_testes: 1    # testes falharam depois da mudança: quantas vezes pedir ao agente para corrigir
+  planejar_com_ia: true   # sem o cérebro mandar os passos, a IA isolada do núcleo planeja (senão, modelos prontos)
+  relatorio_com_ia: true
+  modelo_nucleo: sonnet   # modelo do claude que planeja/julga/resume (isolado, sem ferramentas)
+  preferencias: ""        # ex.: "comentários em português; siga o PEP 8" (vai para todos os agentes)
+  custos:
+    limite_tarefa_usd: 3.0     # custo ESTIMADO máximo de uma orquestração (vale também na assinatura)
+    limite_dia_usd: 5.0        # gasto COBRADO (chaves de API) por dia
+    limite_mes_usd: 30.0
+    assinatura_conta_no_limite: false
+  agentes:                # por agente: ativo, modelo, comando (ex.: ["wsl", "-e", "codex"]), capacidades {categoria: 0..1}
+    claude_code: {}       # modelo: o do claude_cli (sonnet)
+    codex: {}             # modelo: o padrão do seu ~/.codex/config.toml
+    gemini: {}
+    ollama: {}            # modelo: o do llm (qwen3:8b)
+    openrouter: {modelo: openrouter/auto}
+    openai: {modelo: ""}  # defina o modelo para usar GPT pela API (a chave vai pela Central, no cofre)
+  precos_usd_por_milhao: {}    # ex.: {"modelo": [entrada, saída]} para estimar custo de Codex/GPT por chave de API
+  roteador:
+    preferidos: {}             # ex.: {implementacao: codex}: um empurrão para um agente numa categoria
+  testes: {}                   # ex.: {MeuProjeto: ["npm", "run", "test:ci"]}
+
 recursos:                 # Jarvis ligado o tempo todo sem pesar no jogo (jarvis/recursos.py)
   modo_jogo_automatico: true   # GPU ocupada por outro programa: tira Qwen e embeddings do Ollama e segura a reflexão
   gpu_jogo_pct: 50             # uso da GPU (%) que conta como jogo/programa pesado

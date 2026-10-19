@@ -298,6 +298,32 @@ A **Central** abre pelo botão **Central** no topo da HUD ou por voz ("abre a ce
   - repetição com espera, limite de ritmo por serviço e proteção contra execução duplicada.
 - Configure `connect.meu_whatsapp` e `connect.meu_email` (o "eu" das automações) no `config.yaml`.
 
+## JARVIS AI: orquestrador de agentes (detalhes em [docs/ORQUESTRA.md](docs/ORQUESTRA.md))
+O Jarvis coordena Claude Code, Codex, Gemini CLI, GPT (API), OpenRouter, Ollama e um executor de testes. Ele
+planeja o pedido em passos e escolhe o melhor agente para cada um (capacidade, semântica, histórico, custo e
+latência). Também roda em paralelo o que dá, sem duas edições no mesmo projeto ao mesmo tempo. No fim confere com os
+testes de verdade (antes e depois), pede correção se quebrou e consolida um relatório.
+- **Por voz** (Claude): "usa as IAs para analisar e corrigir meu projeto", "peça ao Claude Code para revisar e ao
+  Codex para implementar", "como está a orquestração?", "desfaz a orquestração 3". Ferramentas: `orquestrar`,
+  `aprovar_plano` 🔴, `status_orquestra`, `relatorio_orquestracao`, `controlar_orquestracao`,
+  `desfazer_orquestracao` 🔴, `modo_orquestra`, `autorizar_projeto` 🔴, `consultar_agente`, `mcp_ferramentas` e
+  `mcp_chamar`.
+- **Na Central:**
+  - **Agentes IA:** cartões com estado, versão, login, tarefa atual, tempo, tokens, custo, pausar/cancelar.
+  - **Orquestração:** novo pedido, fluxo ao vivo, aprovar, desfazer e relatório.
+  - **Terminal:** CLIs (detectar, login, instalar, doctor), terminal no backend, projetos autorizados, servidores MCP.
+- **Modos:** automático (só nos projetos autorizados), **supervisionado** (padrão: mostra o plano e espera) e manual.
+- **Segurança:**
+  - só pastas autorizadas;
+  - processos com ambiente sem chaves, tempo e memória limitados;
+  - checkpoint git que desfaz tudo sem mexer no seu histórico;
+  - comando destrutivo ou externo pede confirmação;
+  - limites de custo por tarefa, dia e mês;
+  - auditoria completa;
+  - nenhuma chave na HUD, nos logs ou no contexto dos modelos.
+- **Demonstração:** `.venv\Scripts\python.exe -m jarvis.orquestra.demo --simulado` (sem login) ou `--modelo haiku`
+  (com as CLIs reais).
+
 ## Programar pelo Jarvis (`programar`, `tarefa_programacao`, `vscode`)
 "Jarvis, cria uma página de login", "corrige esse erro", "roda os testes": o pedido vai para o **Claude Code** (Sonnet,
 pela assinatura), que trabalha na pasta do projeto aberto no VS Code (título da janela + pastas que o VS Code guarda em

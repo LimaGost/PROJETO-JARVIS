@@ -211,6 +211,7 @@ function aplicar(ev) {
     case "central": if (typeof Central !== "undefined") Central.receber(ev); break;          // respostas da Central (JARVIS Connect)
     case "connect": if (typeof Central !== "undefined") Central.mudou(); break;              // algo mudou no motor de automações
     case "central_abrir": if (typeof Central !== "undefined") Central.abrir(ev.secao); break;
+    case "orq": if (typeof Orquestra !== "undefined") Orquestra.evento(ev); break;      // AI Command Center ao vivo
   }
 }
 

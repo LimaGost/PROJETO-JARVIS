@@ -113,6 +113,33 @@ def iniciar_connect(cfg, ctl):
         return None
 
 
+def iniciar_orquestra(cfg, ctl):
+    """AI Command Center (jarvis/orquestra): o Jarvis coordena Claude Code, Codex, Gemini, GPT, Ollama e o executor
+    de testes. Um extra: se falhar, o Jarvis segue sem ele."""
+    if not (cfg.get("orquestra", {}) or {}).get("ativo", True):
+        return None
+    try:
+        from jarvis.orquestra import ferramentas as ferramentas_orquestra
+        from jarvis.orquestra.nucleo import Orquestra
+        from jarvis.orquestra.painel import PainelOrquestra
+        embedder = getattr(getattr(ctl, "memoria", None), "embedder", None)   # roteamento semântico (CPU)
+        orq = Orquestra(cfg, embedder=embedder)
+        interrompidas = orq.recuperar()
+        ferramentas_orquestra.ativar(orq)
+        painel = PainelOrquestra(orq)
+        if getattr(ctl, "central", None) is not None:
+            ctl.central.orquestra = painel
+        else:
+            ctl.central = painel
+        orq.aquecer()
+        if interrompidas:
+            print(f"[orquestra] {interrompidas} execução(ões) interrompida(s): dá para retomar na Central")
+        return orq
+    except Exception as e:
+        print(f"[orquestra] não consegui iniciar: {type(e).__name__}: {e}")
+        return None
+
+
 def iniciar_hud(cfg, ctl, silencioso: bool):
     """Sobe o servidor da HUD, a janela e a bandeja. Retorna (servidor, ícone) ou (None, None)."""
     h = cfg.get("hud", {})
@@ -253,6 +280,7 @@ def modo_voz(cfg, silencioso: bool):
         reflexao.consolidador.keep_alive = lambda: cerebro.local.keep_alive
     iniciar_guardiao(cfg, ctl)
     iniciar_connect(cfg, ctl)
+    iniciar_orquestra(cfg, ctl)
     bus.emitir("estado", estado="iniciando", detalhe="Carregando o modelo de linguagem…")
     aquecer_ou_sair(cerebro, cfg)
     ctl.enviar_cerebro()
@@ -379,6 +407,7 @@ def modo_texto(cfg, falar: bool, silencioso: bool):
         reflexao.consolidador.keep_alive = lambda: cerebro.local.keep_alive
     iniciar_guardiao(cfg, ctl)
     iniciar_connect(cfg, ctl)
+    iniciar_orquestra(cfg, ctl)
     bus.emitir("estado", estado="iniciando", detalhe="Carregando o modelo de linguagem…")
     aquecer_ou_sair(cerebro, cfg)
     ctl.enviar_cerebro()
