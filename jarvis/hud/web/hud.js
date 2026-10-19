@@ -345,9 +345,9 @@ function aplicarStats(s) {
 }
 
 /* ============================================================ núcleo holográfico */
-// Esfera de filamentos de luz, a "mente" do J.A.R.V.I.S. nos filmes. Dois temas (hud.tema no config.yaml):
-//  - dourado: o J.A.R.V.I.S. do MCU (Era de Ultron), globo âmbar com o centro incandescente, faíscas e luz quente;
-//  - ciano: o visual anterior, frio, em ciano e azul.
+// Esfera de filamentos de luz, a "mente" do J.A.R.V.I.S. nos filmes. Temas (hud.tema no config.yaml):
+//  - ciano (padrão): ciano e azul, a cor do Jarvis;
+//  - dourado: variação âmbar opcional.
 // O vermelho fica reservado ao pedido de confirmação, que é um alerta.
 const TEMAS = {
   dourado: {
@@ -374,7 +374,7 @@ const TEMAS = {
   },
 };
 // o servidor grava o tema no <html data-tema>: já nasce com as cores certas, sem piscar o outro tema
-let TEMA = TEMAS[document.documentElement.dataset.tema] || TEMAS.dourado;
+let TEMA = TEMAS[document.documentElement.dataset.tema] || TEMAS.ciano;
 const REDUZIR = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const TAU = Math.PI * 2;
 const reator = { t: 0, nivel: 0, cor: [...TEMA.cores.iniciando], giro: 0, giro2: 0, fluxo: 0, onda: 0 };
@@ -464,6 +464,20 @@ const GEO = (() => {
   }
   return { frags };
 })();
+// pulsos de energia correndo pelos filamentos, como impulsos num cérebro (mais rápidos quando ele pensa)
+const PULSOS = (() => {
+  const rnd = gerador(31337), cand = GEO.frags.filter((f) => f.grupo <= 2 && f.pts.length >= 18);
+  return { cand, lista: Array.from({ length: 64 }, () => ({ fr: cand[Math.floor(rnd() * cand.length)], pos: rnd(), vel: 0.35 + rnd() * 0.6 })) };
+})();
+// névoa de luz DENTRO do globo: dá o volume de "nuvem luminosa" dos hologramas do filme
+const NEVOA = (() => {
+  const rnd = gerador(808);
+  return Array.from({ length: 10 }, () => {
+    const [w] = baseAleatoria(rnd), r = 0.2 + rnd() * 0.45;
+    return { x: w[0] * r, y: w[1] * r, z: w[2] * r, s: 0.32 + rnd() * 0.4, f: rnd() * TAU };
+  });
+})();
+const faiscasGlobo = [];   // faíscas que se soltam da superfície e saem girando (muitas quando ele fala)
 const fragmentos = Array.from({ length: 160 }, () => novoFragmento(true));
 function novoFragmento(espalhar) {
   return { a: Math.random() * TAU, r: espalhar ? 0.72 + Math.random() * 0.36 : 0.72 + Math.random() * 0.06, v: 0.03 + Math.random() * 0.08, rastro: Math.random() < 0.5 };
@@ -498,7 +512,7 @@ function projetar(x, y, z, cg, sg, ci, si) {
 // os filamentos são agrupados por intensidade: um traço por faixa em vez de um por filamento
 const FAIXAS = 10;
 const centelhas = [];
-function desenharFilamentos(cc, { cx, cy, ESF, INCL, n, t, corV, corF, corC, sprC }) {
+function desenharFilamentos(cc, { cx, cy, ESF, INCL, n, t, dt, ritmo, corV, corF, corC, sprC }) {
   const ci = Math.cos(INCL), si = Math.sin(INCL), g = reator.giro;
   centelhas.length = 0;
   const giros = [g * 0.35, -g * 0.5, g * 1.4, g * 0.12], cgs = giros.map(Math.cos), sgs = giros.map(Math.sin);
@@ -533,10 +547,72 @@ function desenharFilamentos(cc, { cx, cy, ESF, INCL, n, t, corV, corF, corC, spr
     cc.lineWidth = (0.7 + q * 1.3) * grossura;
     cc.stroke(caminhos[k]);
   }
+  // pulsos: cabeça brilhante com rastro curto, correndo ao longo do filamento; somem quando passam para trás
+  cc.strokeStyle = corC; cc.lineWidth = 1.4 * grossura;
+  for (const pu of PULSOS.lista) {
+    pu.pos += dt * pu.vel * ritmo;
+    if (pu.pos >= 1) { pu.fr = PULSOS.cand[(Math.random() * PULSOS.cand.length) | 0]; pu.pos = 0; pu.vel = 0.35 + Math.random() * 0.6; }
+    const fr = pu.fr, gr = fr.grupo, pts = fr.pts, np = pts.length / 3, i1 = Math.floor(pu.pos * (np - 1)), i0 = Math.max(0, i1 - 3);
+    const cg = cgs[gr], sg = sgs[gr], e = esc[gr];
+    let hx = 0, hy = 0, hz = 0;
+    cc.beginPath();
+    for (let i = i0; i <= i1; i++) {
+      projetar(pts[i * 3], pts[i * 3 + 1], pts[i * 3 + 2], cg, sg, ci, si);
+      hx = cx + P.x * e; hy = cy + P.y * e; hz = P.z / fr.r;
+      i === i0 ? cc.moveTo(hx, hy) : cc.lineTo(hx, hy);
+    }
+    const frente = (1 - Math.max(-1, Math.min(1, hz))) / 2, a = Math.sin(Math.PI * pu.pos) * (0.15 + 0.85 * frente);
+    cc.globalAlpha = a * 0.85; cc.stroke();
+    const sp = (3.5 + 4.5 * frente) * grossura;
+    cc.globalAlpha = a; cc.drawImage(sprC, hx - sp / 2, hy - sp / 2, sp, sp);
+  }
+  cc.lineWidth = 0.8;
   for (let i = 0; i < centelhas.length; i += 4) {
-    const v = centelhas[i + 2], tw = 0.5 + 0.5 * Math.sin(t * 3 + centelhas[i + 3] * 9), s = (3 + v * 6) * grossura;
+    const x = centelhas[i], y = centelhas[i + 1], v = centelhas[i + 2];
+    const tw = 0.5 + 0.5 * Math.sin(t * 3 + centelhas[i + 3] * 9), s = (3 + v * 6) * grossura;
     cc.globalAlpha = Math.min(1, v * tw);
-    cc.drawImage(sprC, centelhas[i] - s / 2, centelhas[i + 1] - s / 2, s, s);
+    cc.drawImage(sprC, x - s / 2, y - s / 2, s, s);
+    if (v * tw > 0.72) {                     // reflexo em cruz nos pontos mais fortes, como numa lente
+      const L = s * 2.4;
+      cc.globalAlpha = Math.min(0.8, (v * tw - 0.72) * 2.5);
+      cc.beginPath(); cc.moveTo(x - L, y); cc.lineTo(x + L, y); cc.moveTo(x, y - L * 0.6); cc.lineTo(x, y + L * 0.6); cc.stroke();
+    }
+  }
+  cc.globalAlpha = 1;
+}
+
+function desenharNevoa(cc, { cx, cy, ESF, INCL, n, t, spr }) {
+  const g = reator.giro * 0.2, cg = Math.cos(g), sg = Math.sin(g), ci = Math.cos(INCL), si = Math.sin(INCL);
+  for (const b of NEVOA) {
+    projetar(b.x, b.y, b.z, cg, sg, ci, si);
+    const s = ESF * b.s * (1 + n * 0.4), a = (0.045 + 0.035 * Math.sin(t * 0.7 + b.f) + n * 0.08) * (0.75 - 0.25 * P.z);
+    cc.globalAlpha = Math.max(0, a);
+    cc.drawImage(spr, cx + P.x * ESF - s, cy + P.y * ESF - s, s * 2, s * 2);
+  }
+  cc.globalAlpha = 1;
+}
+
+function desenharFaiscas(cc, { cx, cy, ESF, n, dt, corC }) {
+  const e = estadoVisivel();
+  let nascer = REDUZIR ? 0 : dt * (e === "falando" ? 10 + n * 90 : e === "pensando" ? 6 : e === "mudo" ? 0 : 1.5);
+  while (nascer > 0 && faiscasGlobo.length < 140) {          // nasce por segundo, no ritmo da voz
+    if (nascer < 1 && Math.random() > nascer) break;
+    nascer -= 1;
+    faiscasGlobo.push({ a: Math.random() * TAU, r: 0.95 + Math.random() * 0.1, v: 0.18 + Math.random() * 0.5 + n * 0.6,
+                   giro: (Math.random() - 0.5) * 1.6, vida: 0, dura: 0.6 + Math.random() * 1.0 });
+  }
+  cc.strokeStyle = corC; cc.lineCap = "round";
+  for (let i = faiscasGlobo.length - 1; i >= 0; i--) {
+    const f = faiscasGlobo[i];
+    f.vida += dt;
+    if (f.vida >= f.dura) { faiscasGlobo.splice(i, 1); continue; }
+    f.r += f.v * dt; f.a += f.giro * dt; f.v *= 1 - dt * 0.8;
+    const q = 1 - f.vida / f.dura, ra = f.r - f.v * 0.07, aa = f.a - f.giro * 0.07;
+    cc.globalAlpha = q * q * 0.9; cc.lineWidth = 0.6 + q * 1.2;
+    cc.beginPath();
+    cc.moveTo(cx + Math.cos(aa) * ra * ESF, cy + Math.sin(aa) * ra * ESF);
+    cc.lineTo(cx + Math.cos(f.a) * f.r * ESF, cy + Math.sin(f.a) * f.r * ESF);
+    cc.stroke();
   }
   cc.globalAlpha = 1;
 }
@@ -721,15 +797,18 @@ function desenharReator(dt) {
     c, W, H, cx, cy, R: ESF / 0.7, ESF, n, dt, t: reator.t, rgba, fundo,
     corV: `rgb(${r},${g},${b})`, corF: `rgb(${fundo})`, corC: `rgb(${cor.map((v) => Math.round(v + (255 - v) * 0.6)).join(",")})`,
     INCL: 0.38 + 0.05 * Math.sin(reator.t * 0.25), spr: brilho(r, g, b), sprC: brilho(225, 250, 255),
+    ritmo: REDUZIR ? 0.2 : (e === "pensando" || e === "transcrevendo" ? 2.6 : e === "falando" ? 1.6 + n * 2 : e === "mudo" ? 0.2 : 0.8),
   };
 
   desenharAneis(X);
 
   cc.globalCompositeOperation = "lighter";
   desenharProjetor(cc, X);
+  desenharNevoa(cc, X);
   desenharCentro(cc, X);
   desenharFilamentos(cc, X);
   desenharFragmentos(cc, X);
+  desenharFaiscas(cc, X);
   desenharOrbitas(cc, X);
   cc.globalCompositeOperation = "source-over";
 

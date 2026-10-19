@@ -41,7 +41,7 @@ hud:
   porta: 8765             # se estiver ocupada, usa a próxima livre
   abrir_ao_iniciar: true  # abre a janela da HUD (Edge, modo aplicativo)
   bandeja: true           # ícone na bandeja do Windows
-  tema: dourado           # dourado = globo âmbar do J.A.R.V.I.S. do MCU | ciano = visual frio anterior
+  tema: ciano             # ciano = o visual do Jarvis (padrão) | dourado = variação âmbar, opcional
 
 recursos:                 # Jarvis ligado o tempo todo sem pesar no jogo (jarvis/recursos.py)
   modo_jogo_automatico: true   # GPU ocupada por outro programa: tira Qwen e embeddings do Ollama e segura a reflexão

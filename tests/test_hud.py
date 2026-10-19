@@ -486,8 +486,8 @@ def test_porta_ocupada_escolhe_outra():
 
 
 
-@pytest.mark.parametrize("tema,esperado", [(None, "dourado"), ("ciano", "ciano"), ("dourado", "dourado"),
-                                           ('"><script>alert(1)</script>', "dourado")])
+@pytest.mark.parametrize("tema,esperado", [(None, "ciano"), ("ciano", "ciano"), ("dourado", "dourado"),
+                                           ('"><script>alert(1)</script>', "ciano")])
 def test_tema_do_config_vai_no_html_e_valor_estranho_nao_entra(tema, esperado):
     ctl = montar(voz=VozFalsa(), mic=MicFalso(), memoria=None)
     if tema is not None:

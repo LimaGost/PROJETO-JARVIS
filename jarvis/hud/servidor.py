@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from jarvis.hud.bus import bus
 
 PASTA_WEB = Path(__file__).with_name("web")
-TEMAS = ("dourado", "ciano")      # hud.tema: dourado = J.A.R.V.I.S. do MCU (padrão) | ciano = visual frio anterior
+TEMAS = ("ciano", "dourado")      # hud.tema: ciano = visual do Jarvis (padrão) | dourado = variação âmbar opcional
 MAX_MENSAGEM = 4000
 INTERVALO_NIVEL_S = 0.05
 INTERVALO_STATS_S = 2.0
@@ -46,8 +46,8 @@ class ServidorHUD:
         self.host = host
         self.porta = porta_livre(host, porta)
         self.token = secrets.token_urlsafe(24)
-        tema = ((getattr(controle, "cfg", None) or {}).get("hud", {}) or {}).get("tema", "dourado")
-        self.tema = tema if tema in TEMAS else "dourado"     # entra no HTML: só valores conhecidos
+        tema = ((getattr(controle, "cfg", None) or {}).get("hud", {}) or {}).get("tema", "ciano")
+        self.tema = tema if tema in TEMAS else "ciano"       # entra no HTML: só valores conhecidos
         self.hosts_ok = {f"127.0.0.1:{self.porta}", f"localhost:{self.porta}"}
         self.origens_ok = {f"http://{h}" for h in self.hosts_ok}
         self._conexoes: set[asyncio.Queue] = set()

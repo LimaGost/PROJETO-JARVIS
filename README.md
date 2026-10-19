@@ -326,10 +326,9 @@ O modelo local de 8B é o gargalo (erra instruções simples, inventa resultados
 **Para quem mexer no código:** o histórico enviado é somente-acréscimo (o contexto fica dentro da mensagem do usuário) e usa `prefix_mismatch_behavior: drop_block`; ferramentas e prompt de sistema têm de ser idênticos em todo pedido (cache); nunca `tool_choice` forçado (400 nestes modelos).
 
 ## HUD (fase 4)
-**Visual:** `hud.tema: dourado` (padrão) é o J.A.R.V.I.S. do MCU (Era de Ultron): globo de filamentos âmbar com o centro
-incandescente, céu quente, faíscas e painéis em ouro; cada estado tem a sua luz (âmbar aguardando, laranja intenso
-pensando, branco-dourado falando, vermelho na autorização). Suas mensagens ficam em ciano, como o globo azul de contraste.
-`hud.tema: ciano` volta ao visual frio anterior. As cores ficam em `TEMAS` (`hud.js`) e nas variáveis do `hud.css`.
+**Visual:** globo de filamentos de luz ciano (a "mente" do Jarvis), com pulsos de energia correndo pelos filamentos
+(mais rápidos pensando), névoa de luz por dentro, reflexos nos pontos mais fortes e faíscas que se soltam quando ele
+fala, no ritmo da voz. Cada estado tem a sua luz. `hud.tema: dourado` é uma variação âmbar opcional.
 Abre sozinha como janela de aplicativo (Edge) em **http://127.0.0.1:8765** (se a porta estiver ocupada, usa a próxima: veja a linha "HUD em ..." no console).
 Reator animado que reage à sua voz e à dele, conversa ao vivo, painel de memória (filtrar e esquecer), CPU/RAM/GPU/VRAM, caixa de texto, **PARAR TUDO** (Esc) e Mudo. As ações continuam registradas em `data/logs/acoes.jsonl`, só não aparecem na tela.
 - **Confirmação 🔴 por voz ou por clique**, o que vier primeiro. O botão Confirmar só libera após 0,7 s; pedido digitado na HUD nunca abre o microfone.

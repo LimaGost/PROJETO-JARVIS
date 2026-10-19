@@ -41,7 +41,7 @@
   --h-e4f9ff: #e4f9ff;
   --h-ff9a9a: #ff9a9a;
 }
-/* Tema dourado (padrão): o J.A.R.V.I.S. do MCU, globo âmbar e luz quente. hud.tema: ciano volta ao visual frio. */
+/* Tema dourado (opcional, hud.tema: dourado): globo âmbar e luz quente. O padrão é o ciano, definido no :root. */
 :root[data-tema="dourado"] {
   --fundo: #060402;
   --ciano: #ffaa33;
