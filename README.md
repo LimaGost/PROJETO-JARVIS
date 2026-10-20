@@ -270,7 +270,11 @@ sexta às 15h", "manda no WhatsApp pra Maria que eu chego às 8". Configuração
 - **Por que só com o Claude:** são 6 ferramentas a mais (~600 tokens) e o contexto de 6144 tokens do Qwen já está no limite.
 
 ## JARVIS Connect: integrações, tarefas e automações (detalhes em [docs/CONNECT.md](docs/CONNECT.md))
-A **Central** abre pelo botão **Central** no topo da HUD ou por voz ("abre a central"). Tem quatro abas:
+> **2026-10-20:** a Central ficou só com **Agentes IA · Orquestração · Terminal · Integrações**. As abas Painel, Tarefas e
+> Automações saíram, e as automações estão desligadas (`connect.automacoes: false`). Nada roda sozinho, e os lembretes de
+> tarefa por voz continuam. O texto abaixo descreve o que existia antes.
+
+A **Central** abre pelo botão **Central** no topo da HUD ou por voz ("abre a central"). Tinha quatro abas:
 - **Painel:** integrações ativas, automações, tarefas, falhas, consumo de APIs, próximas execuções e linha do tempo.
 - **Integrações:** catálogo por categoria, com busca, estado em tempo real, teste de conexão, configuração e histórico.
   Cada cartão diz se a integração está **implementada**, **em desenvolvimento** ou **planejada**.
@@ -341,7 +345,14 @@ pela assinatura), que trabalha na pasta do projeto aberto no VS Code (título da
 - Prompt de conversa: ele participa, comenta e devolve perguntas quando você só quer conversar; ordens ele confirma curto.
 - **Resposta instantânea:** se uma ação vai demorar e ele ainda não disse nada, fala na hora "Já cuido disso, senhor"
   (uma vez por pedido; não nas ações instantâneas nem quando vai pedir autorização).
+- **Chamado do jeito que você fala:** além do "Hey Jarvis", ele acorda com "Ei Jarvis", "Oi Jarvis", "E aí, Jarvis",
+  "Jarvis, está aí?", "Bom dia, Jarvis"… (frases curtas são transcritas pelo Whisper e conferidas em
+  `jarvis/audio/chamado.py`). Com o pedido junto ("Jarvis, que horas são?") ele responde direto, sem o "Pois não?".
+  O nome no meio de uma conversa ("vi o Jarvis no filme") não acorda. Desligar: `wakeword.por_frase: false`.
 - O chamado varia ("Pois não?", "Sim, senhor?", "Às ordens."...) e as frases curtas repetidas saem da memória, sem gerar de novo.
+- **Pesquisa na internet de verdade:** "pesquise X em vários sites" usa `pesquisar_a_fundo`. Ele busca, lê até 8 páginas
+  ao mesmo tempo, fica com os trechos que importam de cada uma e responde citando os sites. Com o Claude, ele também usa
+  a busca e a leitura de páginas da própria Anthropic (`claude_cli.web_nativa`).
 - Fim da fala detectado em 0,7 s (`vad.silencio_ms`); se ele terminar com uma pergunta, espera sua resposta por 15 s.
 
 ## Uso da assinatura (claude-cli)
@@ -359,21 +370,30 @@ com um print da tela ~US$ 0,01. Na assinatura nada disso é cobrado à parte: co
 - Ajustes em `interrupcao:` no `config.yaml`. Se ele se interromper sozinho (alto-falante alto perto do microfone), suba `fator_eco`
   para 4–5, ou use `por_voz: false` (aí só o "Hey Jarvis" interrompe). Com fone de ouvido funciona melhor.
 
-## Trocar a mentalidade (Qwen ⇄ Claude), a qualquer hora
+## Trocar o cérebro (Qwen, Claude, ChatGPT, Gemini), a qualquer hora
 Três jeitos, sem reiniciar:
-- **Na HUD:** os botões **Qwen local · Claude · assinatura · Claude · API** no rodapé (voltaram em 2026-10-18). O ativo fica
-  destacado; o que não está disponível fica apagado e o motivo aparece ao passar o mouse (ex.: "falta a chave em data/anthropic.key").
-- **Por voz/texto:** "usa o Claude", "muda para o Qwen", "volta pro local".
-- **Modelo do Claude (Opus · Sonnet · Haiku):** botões ao lado, na HUD, quando o Claude está ativo, ou por voz: "usa o
-  Opus", "muda para o Haiku" (se estiver no Qwen, já passa para o Claude). Opus = o mais capaz (gasta ~5x a cota),
+- **Na HUD:** o seletor **Cérebro** no rodapé, uma lista com **Qwen local · Claude · assinatura · Claude · API ·
+  ChatGPT · CLI · Gemini · CLI** (2026-10-20). Cada opção diz como está: pronta, "entrar" (sem login), "sem chave" ou
+  "não instalado". **Escolher um que está sem login abre o login oficial sozinho** (o navegador pede a sua conta) e o
+  Jarvis troca assim que você terminar de entrar.
+- **Por voz/texto:** "usa o Claude", "usa o ChatGPT", "muda pro Gemini", "volta pro Qwen", "volta pro local".
+- **Modelo do Claude (Opus · Sonnet · Haiku):** uma segunda lista ao lado, quando o Claude está ativo, ou por voz: "usa o
+  Opus", "muda para o Haiku" (se estiver em outro cérebro, já passa para o Claude). Opus = o mais capaz (gasta ~5x a cota),
   Sonnet = equilíbrio, Haiku = o mais rápido e econômico. Trocar reinicia o processo do `claude` com o novo modelo
   (~2 s), testa antes de largar o atual e continua a conversa. Fica salvo em `data/preferencias.json`. Lista em
   `claude_cli.modelos`; vale também para o cérebro por API (`claude.modelos` mapeia o apelido para o id).
+- **ChatGPT · CLI** (`codex_cli`) e **Gemini · CLI** (`gemini_cli`), em `jarvis/brain/outros_cli.py`:
+  - usam o login da sua conta (Codex: `codex login`; Gemini: conta Google);
+  - as ferramentas são as mesmas do Jarvis, pela mesma ponte MCP;
+  - o terminal, o navegador e os plugins próprios das CLIs ficam desligados;
+  - se tentarem usar qualquer outra ferramenta, o Jarvis encerra o processo e a reserva local responde;
+  - cada pedido é um processo novo (alguns segundos a mais que o Claude). **Ainda não conversaram de verdade:** foram
+    feitos sem login.
 - **`cerebro.motor` no `config.yaml`:** só a escolha inicial.
 - A escolha fica salva em `data/preferencias.json` (ignorado pelo git) e vale na próxima vez que ligar.
 - A troca espera o pedido atual acabar, sobe e testa a nova mentalidade **antes** de largar a antiga; se falhar, continua na atual e avisa.
 - A conversa continua ao trocar (a nova mentalidade recebe a conversa recente); a memória de longo prazo é a mesma.
-- Opções: **Qwen local** (grátis, privado), **Claude · assinatura** (CLI) e **Claude · API** (só aparece disponível com a chave em `data/anthropic.key`).
+- Opções: **Qwen local** (grátis, privado), **Claude · assinatura** (CLI), **Claude · API** (só com a chave em `data/anthropic.key`), **ChatGPT · CLI** e **Gemini · CLI**.
 - Ao sair do Claude, o processo `claude` é encerrado (não fica gastando nada).
 
 ## Cérebro `claude-cli` (a sua assinatura, sem chave) — o motor ativo

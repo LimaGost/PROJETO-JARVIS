@@ -127,3 +127,10 @@
 @media (prefers-reduced-motion: reduce) {
   .no-f.executando::after, .st.executando { animation: none; }
 }
+
+/* Agentes IA: cartão simples (nome, estado, um botão) */
+.gasto { font: 11px var(--mono); color: var(--suave); margin-left: auto; }
+.integ.agente { gap: 10px; }
+.integ.agente .estado { font-size: 11px; }
+.integ.agente .estado.aguardando { color: var(--ambar); }
+.integ.agente .selo.simulado { margin-left: 6px; }

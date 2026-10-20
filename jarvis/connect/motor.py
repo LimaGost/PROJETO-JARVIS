@@ -317,6 +317,8 @@ class Motor:
                  relogio: Callable[[], datetime] = datetime.now, emitir: Callable | None = None):
         """servicos: funções que falam com o mundo (trocáveis nos testes). Faltando uma, a ação dá erro explicado."""
         self.banco, self.cfg, self.relogio = banco, cfg or {}, relogio
+        # connect.automacoes: false (escolha do Iury) = as automações não rodam; os lembretes de tarefa continuam
+        self.automacoes_ligadas = ((self.cfg.get("connect") or {}).get("automacoes", True)) is not False
         self.s = servicos or {}
         self.emitir = emitir or (lambda **k: None)
         self._pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="connect")
@@ -386,7 +388,7 @@ class Motor:
     def tick(self):
         """Uma volta do agendador: automações de horário vencidas e lembretes de tarefas."""
         agora = self.relogio()
-        for auto in self.banco.automacoes(so_ativas=True):
+        for auto in (self.banco.automacoes(so_ativas=True) if self.automacoes_ligadas else []):
             if auto["fluxo"]["gatilho"].get("tipo") != "horario" or not auto["proxima"]:
                 continue
             quando = datetime.fromisoformat(auto["proxima"])
@@ -408,6 +410,8 @@ class Motor:
 
     def publicar(self, evento: str, dados: dict, id_evento: str):
         """Um acontecimento externo (mensagem, e-mail, reunião chegando). Dispara as automações que combinam."""
+        if not self.automacoes_ligadas:
+            return 0
         chave_ctx = {"whatsapp.mensagem": "mensagem", "gmail.novo": "email", "agenda.proxima": "evento"}.get(evento,
                                                                                                            "webhook")
         ctx = {**contexto_base(self.relogio()), chave_ctx: dados}
@@ -632,7 +636,7 @@ class Motor:
 
     # ------------------------------------------------------------ vigias (Gmail e Agenda)
     def precisa(self, evento: str) -> bool:
-        return any(a["fluxo"]["gatilho"].get("evento") == evento for a in self.banco.automacoes(so_ativas=True))
+        return self.automacoes_ligadas and any(a["fluxo"]["gatilho"].get("evento") == evento for a in self.banco.automacoes(so_ativas=True))
 
     def vigiar(self):
         """Gmail e Agenda não têm webhook simples: consulta a cada 2 min, só se alguma automação precisa."""

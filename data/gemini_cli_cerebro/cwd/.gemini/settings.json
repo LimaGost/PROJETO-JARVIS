@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "jarvis": {
+      "command": "/usr/bin/python",
+      "args": [
+        "-X",
+        "utf8",
+        "/home/user/PROJETO-JARVIS/jarvis/brain/ponte_mcp.py"
+      ],
+      "trust": true,
+      "timeout": 300000,
+      "env": {
+        "JARVIS_PONTE_URL": "http://127.0.0.1:46705",
+        "JARVIS_PONTE_TOKEN": "tCWnEmulxsZ2T1zOTTT-aVRdAEv8u4cI",
+        "PYTHONUTF8": "1"
+      }
+    }
+  },
+  "mcp": {
+    "allowed": [
+      "jarvis"
+    ]
+  }
+}

@@ -39,13 +39,16 @@ def sim_ou_nao(texto: str) -> bool:
     return any(p in PALAVRAS_SIM for p in palavras)
 
 
-# Trocar de mentalidade por voz. O Whisper escreve "Qwen" de muitos jeitos (quen, queen, kuen...) e "Claude" também.
+# Trocar de mentalidade por voz. O Whisper escreve "Qwen" de muitos jeitos (quen, queen, kuen...); "Claude",
+# "ChatGPT" e "Gemini" também.
 MAX_PALAVRAS_TROCA = 7
 VERBOS_TROCA = {"usa", "usar", "use", "muda", "mudar", "troca", "trocar", "volta", "voltar", "ativa", "ativar", "coloca",
                 "colocar", "passa", "passar", "modo", "mentalidade", "cerebro", "selecionar", "seleciona", "escolhe"}
 ALVO_QWEN = ("qwen", "quen", "queen", "kuen", "cuen", "quein")
 ALVO_CLAUDE = ("claude", "claudio", "clode", "cloud", "clod")
 ALVO_LOCAL = {"local", "offline"}
+ALVO_CHATGPT = ("chatgpt", "gpt", "chat", "codex", "chatgepete", "openai", "xatgpt", "chatgp")
+ALVO_GEMINI = ("gemini", "jemini", "gemine", "geminai", "gemaini", "jeminai")
 # modelos do Claude, do jeito que o Whisper costuma escrever
 ALVO_MODELOS = {"opus": ("opus", "opos", "opuz", "hopus"),
                 "sonnet": ("sonnet", "sonet", "soneto", "sonete", "sonnete", "sonit"),
@@ -65,12 +68,18 @@ def destino_cerebro(texto: str) -> str | None:
             if any(SequenceMatcher(None, p, a).ratio() >= 0.8 for a in grafias):
                 return modelo
     for p in palavras:
+        if p == "gpt":
+            return "chatgpt"
         if p in VERBOS_TROCA or len(p) < 4:
             continue
         if any(SequenceMatcher(None, p, a).ratio() >= 0.72 for a in ALVO_QWEN) or p in ALVO_LOCAL:
             return "qwen"
         if any(SequenceMatcher(None, p, a).ratio() >= 0.72 for a in ALVO_CLAUDE):
             return "claude"
+        if p in ALVO_CHATGPT or any(SequenceMatcher(None, p, a).ratio() >= 0.8 for a in ALVO_CHATGPT if len(a) > 4):
+            return "chatgpt"
+        if any(SequenceMatcher(None, p, a).ratio() >= 0.75 for a in ALVO_GEMINI):
+            return "gemini"
     return None
 
 
@@ -103,7 +112,8 @@ def pedido_de_silencio(texto: str) -> bool:
 
 
 def identificar(texto: str) -> str | None:
-    """'desligar' | 'esquecer' | 'calar' | 'trocar:qwen' | 'trocar:claude' | 'trocar:opus' (sonnet, haiku) | None"""
+    """'desligar' | 'esquecer' | 'calar' | 'trocar:qwen' | 'trocar:claude' | 'trocar:chatgpt' | 'trocar:gemini' |
+    'trocar:opus' (sonnet, haiku) | None"""
     destino = destino_cerebro(texto)
     if destino:
         return f"trocar:{destino}"

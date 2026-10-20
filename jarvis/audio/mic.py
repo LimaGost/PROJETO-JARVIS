@@ -10,6 +10,8 @@ from openwakeword.model import Model
 from jarvis.config import caminho
 
 BLOCO = 1280  # 80 ms a 16 kHz, tamanho que o openWakeWord espera
+MAX_FRASE_CHAMADO_S = 7.0     # chamado por frase: frases maiores que isso não são chamado
+FIM_FRASE_CHAMADO_S = 0.45    # silêncio que fecha a frase
 
 
 class Microfone:
@@ -96,6 +98,57 @@ class Microfone:
             if max(scores.values()) >= self.limiar:
                 return True
         return False
+
+    def esperar_chamado(self, ouvido=None) -> tuple[bool, str]:
+        """Como esperar_wakeword, mas também entende o chamado por frase ("Ei Jarvis", "Jarvis, está aí?",
+        "Jarvis, que horas são?"): as frases curtas são transcritas pelo `ouvido` e conferidas em chamado.analisar.
+        Retorna (acordou, pedido que veio junto ou "")."""
+        from jarvis.audio import chamado
+        self.limpar()
+        self.wake.reset()
+        dur_bloco = BLOCO / self.taxa
+        pre: list[np.ndarray] = []
+        frase: list[np.ndarray] = []
+        silencio = 0.0
+        while not self.encerrar.is_set():
+            try:
+                bloco = self.fila.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            if self.silenciado:
+                frase, pre = [], []
+                continue
+            if max(self.wake.predict(bloco).values()) >= self.limiar:
+                return True, ""
+            if ouvido is None:
+                continue
+            voz = self._tem_voz(bloco)
+            if not frase:
+                pre = (pre + [bloco])[-4:]
+                if voz:
+                    frase, silencio = list(pre), 0.0
+                continue
+            frase.append(bloco)
+            silencio = 0.0 if voz else silencio + dur_bloco
+            duracao = len(frase) * dur_bloco
+            if duracao > MAX_FRASE_CHAMADO_S:          # conversa longa (TV, outra pessoa): não é chamado
+                frase, pre = [], []
+                continue
+            if silencio < FIM_FRASE_CHAMADO_S:
+                continue
+            audio, frase, pre = np.concatenate(frase), [], []
+            if duracao < 0.5:
+                continue
+            try:
+                texto = ouvido.transcrever(audio)
+            except Exception:
+                continue
+            acordou, pedido = chamado.analisar(texto)
+            if acordou:
+                print(f"[chamado] ouvi: {texto}")
+                return True, pedido
+            self.wake.reset()                          # o que tocou durante a transcrição não conta
+        return False, ""
 
     def gravar_fala(self, espera_inicio_s: float, cancelar: threading.Event | None = None) -> np.ndarray | None:
         """Grava até o silêncio. Retorna None se ninguém falou a tempo ou se `cancelar` foi acionado."""

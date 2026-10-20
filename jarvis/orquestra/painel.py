@@ -10,6 +10,7 @@ from jarvis.orquestra.planejador import ordem_topologica
 from jarvis.orquestra.terminal import Terminal
 
 PROVEDORES_CHAVE = {"openrouter": "openrouter", "openai": "openai", "gemini": "gemini"}
+CLI_DO_AGENTE = {"claude_code": "claude", "codex": "codex", "gemini": "gemini"}     # login automático
 
 
 def _int(v) -> int:
@@ -42,7 +43,14 @@ class PainelOrquestra:
 
     # ------------------------------------------------------------ agentes
     def orq_estado(self, p):
+        from jarvis.brain import logins
+        from jarvis.orquestra.terminal import INSTALACAO
         e = self.n.estado_agentes()
+        for c in e["agentes"]:
+            a = self.n.agentes.get(c["id"])
+            c["ativo"] = bool(a is None or a.ativo)
+            c["instalar_cmd"] = INSTALACAO.get(c["id"], "")
+            c["entrando"] = c["id"] in CLI_DO_AGENTE and logins.esperando(CLI_DO_AGENTE[c["id"]])
         ativas = self.n.banco.execucoes(10, ("executando", "aguardando_aprovacao", "interrompida", "planejada"))
         e["ativas"] = [self._resumo_exe(x) for x in ativas]
         e["processos"] = len(self.terminal.estado()["processos"])
@@ -186,7 +194,22 @@ class PainelOrquestra:
         return {"itens": self.terminal.clis(bool(p.get("forcar")))}
 
     def orq_cli_login(self, p):
-        return {"mensagem": self.terminal.login(_txt(p.get("id"), 40))}
+        """Login automático: abre o login oficial da CLI e confere sozinho até você terminar (o cartão atualiza)."""
+        from jarvis.brain import logins
+        id_ = _txt(p.get("id"), 40)
+        cli = CLI_DO_AGENTE.get(id_)
+        a = self.n.agentes.get(id_)
+        if cli is None or a is None:
+            return {"mensagem": self.terminal.login(id_)}
+
+        def terminou(ok: bool, detalhe: str):
+            a.esquecer_cache()
+            logins.esquecer_cache(cli)
+            self.n.monitor.log(None, None, id_, "sistema", f"login do {a.nome}: {'feito' if ok else detalhe}")
+            self.n.monitor.mudou(None, login=id_, ok=ok)
+        frase = logins.login_automatico(cli, terminou, self.n.agentes[id_].cfg.get("comando"))
+        self.n.monitor.mudou(None, login=id_)
+        return {"mensagem": frase}
 
     def orq_cli_instalar(self, p):
         return self.terminal.instalar(_txt(p.get("id"), 40), bool(p.get("confirmado")))

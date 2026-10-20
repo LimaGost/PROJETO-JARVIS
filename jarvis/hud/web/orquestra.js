@@ -76,8 +76,7 @@ const Orquestra = (() => {
     O.estado = e;
     A.contador("agentes", e.agentes.filter((a) => a.estado === "executando").length);
     const c = e.custos, lim = c.limites;
-    const kpi = (valor, rotulo, icn, alerta) => h("div", { class: "kpi" + (alerta ? " alerta" : "") + (valor.length > 11 ? " txt" : "") }, ic(icn),
-      h("b", { texto: valor }), h("span", { texto: rotulo }));
+    const visiveis = e.agentes.filter((a) => a.ativo !== false);
     A.secao(
       h("div", { class: "filtros" },
         h("span", { class: "c-dica", texto: "Modo:" }),
@@ -85,54 +84,52 @@ const Orquestra = (() => {
           title: id === "automatico" ? "Planeja e executa sozinho (nos projetos autorizados), respeitando os limites" :
             id === "supervisionado" ? "Mostra o plano e espera você aprovar" : "Você escolhe os agentes de cada passo",
           onclick: () => trocarModo(id) }, ic(icn), " " + rot)),
-        h("span", { class: "chip-sem", title: "Como o roteador compara pedidos com o que cada agente faz bem",
-          texto: e.semantica === "semantica" ? "roteamento semântico (embeddings)" : "roteamento léxico (Ollama fechado)" }),
+        h("span", { class: "gasto", title: "Estimado hoje (inclui a assinatura) · cobrado nas chaves de API / limite do dia",
+          texto: `Hoje: ${usd(c.hoje.custo)} · cobrado ${usd(c.hoje_no_limite)} de ${usd(lim.dia)}` }),
         A.botao("Limites", "coins", () => modalLimites(c))),
-      h("div", { class: "kpis" },
-        kpi(usd(c.hoje.custo), "Estimado hoje", "activity"),
-        kpi(`${usd(c.hoje_no_limite)} / ${usd(lim.dia)}`, "Cobrado hoje / limite", "coins", c.hoje_no_limite >= lim.dia),
-        kpi(`${usd(c.mes_no_limite)} / ${usd(lim.mes)}`, "Mês / limite", "calendar", c.mes_no_limite >= lim.mes),
-        kpi(usd(lim.tarefa), "Limite por tarefa", "shield-check"),
-        kpi(String((c.hoje.entrada || 0) + (c.hoje.saida || 0)), "Tokens hoje", "gauge")),
       e.ativas.length ? [h("h3", {}, ic("workflow"), "Em andamento"), h("div", { class: "lista-exe" }, e.ativas.map(linhaExecucao))] : null,
-      h("h3", {}, ic("bot"), `Agentes (${e.agentes.length})`),
-      h("div", { class: "grade" }, [...e.agentes].sort((x, y) => (ORDEM_AG[x.estado] ?? 9) - (ORDEM_AG[y.estado] ?? 9)).map(cartaoAgente)));
+      h("div", { class: "grade" }, [...visiveis].sort((x, y) => (ORDEM_AG[x.estado] ?? 9) - (ORDEM_AG[y.estado] ?? 9)).map(cartaoAgente)));
   }
   async function trocarModo(id) {
     if (id === "automatico" && !confirm("No modo automático os agentes executam sem esperar aprovação nos projetos que você já " +
       "autorizou (com checkpoint para desfazer e limites de custo). Continuar?")) return;
     try { await A.pedir("orq_modo", { modo: id }); A.recarregar(); } catch (e) { A.erro(e); }
   }
+  /* uma frase de estado, em português de gente */
+  function situacao(a) {
+    if (a.trabalhos.length) return ["executando", "Trabalhando"];
+    if (a.entrando) return ["aguardando", "Esperando você entrar…"];
+    if (a.estado === "disponivel") return ["conectado", "Pronto"];
+    if (!a.instalado) return ["desconectado", "Não instalado"];
+    if (a.estado === "desconectado") return ["aguardando", a.pode_login ? "Precisa entrar" : (a.detalhe || "Desconectado")];
+    return ["erro", a.detalhe || "Com problema"];
+  }
+  async function entrar(a) {
+    try { aviso((await A.pedir("orq_cli_login", { id: a.id })).mensagem); A.recarregar(); } catch (e) { A.erro(e); }
+  }
   function cartaoAgente(a) {
-    const acoes = [A.botao("Detalhes", "chevron-right", () => detalhesAgente(a)),
-      A.botao("Verificar", "refresh-cw", async () => { try { await A.pedir("orq_agente_verificar", { id: a.id }); A.recarregar(); } catch (e) { A.erro(e); } })];
-    if (a.pode_login && a.estado === "desconectado" && a.instalado)
-      acoes.push(A.botao("Login", "log-in", async () => { try { aviso((await A.pedir("orq_cli_login", { id: a.id })).mensagem); } catch (e) { A.erro(e); } }));
-    if (["openrouter", "openai", "gemini"].includes(a.id)) acoes.push(A.botao("Chave", "key-round", () => modalChave(a)));
+    const [classe, frase] = situacao(a);
+    const acoes = [];
+    if (!a.trabalhos.length) {
+      if (a.instalado && a.estado !== "disponivel" && a.pode_login && !a.entrando) acoes.push(A.botao("Entrar", "log-in", () => entrar(a)));
+      else if (!a.instalado && a.instalar_cmd) acoes.push(A.botao("Instalar", "download", () => instalar(a)));
+      if (["openrouter", "openai"].includes(a.id) || (a.id === "gemini" && a.estado !== "disponivel"))
+        acoes.push(A.botao(a.estado === "disponivel" && a.id !== "gemini" ? "Trocar chave" : "Chave", "key-round", () => modalChave(a)));
+    }
+    acoes.push(A.botao("Detalhes", "chevron-right", () => detalhesAgente(a)));
     const trabalhos = a.trabalhos.map((t) => h("div", { class: "trab" },
-      h("div", {}, h("b", { texto: `#${t.execucao} · ${t.titulo}` }), " ", tempoVivo(t.tempo_s, t.pausado),
-        t.memoria_mb ? h("small", { texto: ` · ${Math.round(t.memoria_mb)} MB` }) : null),
-      h("small", { class: "ultimo", texto: t.ultimo }),
+      h("div", {}, h("b", { texto: t.titulo }), " ", tempoVivo(t.tempo_s, t.pausado)),
       h("div", { class: "rodape-i" },
         t.pausado ? A.botao("Retomar", "play", () => controlar("orq_retomar", t.execucao, t.passo))
           : (a.suporta_pausar ? A.botao("Pausar", "pause", () => controlar("orq_pausar", t.execucao, t.passo)) : null),
         A.botao("Cancelar", "x", () => controlar("orq_cancelar_passo", t.execucao, t.passo), "perigo"),
         A.botao("Ver", "eye", () => abrirExecucao(t.execucao)))));
-    const hoje = a.hoje || {};
     return h("div", { class: "integ agente " + a.estado },
       h("div", { class: "topo-i" }, h("span", { class: "logo-i" }, ic(a.icone, "g")),
-        h("div", {}, h("h4", { texto: a.nome }), h("div", { class: "auth-l" }, h("span", { class: "auth", texto: `${a.provedor} · ${a.tipo.toUpperCase()}` }),
-          /^\d/.test(a.versao || "") ? h("span", { class: "selo " + (a.compativel ? "implementado" : "em_desenvolvimento"), texto: "v" + a.versao }) : null,
-          a.simulado ? h("span", { class: "selo simulado", title: "CLI simulada da demonstração: não é a IA de verdade", texto: "SIMULADO" }) : null))),
-      h("p", { texto: a.descricao }),
-      h("div", { class: "rodape-i" }, h("span", { class: "estado " + estadoCss(a.estado), title: a.detalhe, texto: ESTADO_AG[a.estado] || a.estado }),
-        h("span", { class: "sinc", texto: CUSTO[a.custo_modo] || a.custo_modo })),
-      a.detalhe ? h("span", { class: "auth", texto: a.detalhe }) : null,
+        h("div", {}, h("h4", { texto: a.nome }), h("span", { class: "auth", texto: a.provedor }),
+          a.simulado ? h("span", { class: "selo simulado", title: "CLI simulada da demonstração: não é a IA de verdade", texto: "SIMULADO" }) : null)),
+      h("span", { class: "estado " + classe, title: a.detalhe || "", texto: frase }),
       trabalhos.length ? h("div", { class: "trabalhos" }, trabalhos) : null,
-      h("div", { class: "metricas" },
-        h("span", {}, ic("coins"), " ", usd(hoje.custo || 0)),
-        h("span", {}, ic("gauge"), " ", String((hoje.entrada || 0) + (hoje.saida || 0)), " tok"),
-        h("span", { title: "acertos / execuções (o roteador aprende com isso)" }, ic("activity"), " ", `${a.historico.sucessos}/${a.historico.execucoes}`)),
       h("div", { class: "rodape-i" }, acoes));
   }
   const estadoCss = (e) => ({ disponivel: "conectado", executando: "aguardando", aguardando: "aguardando", desconectado: "desconectado", erro: "erro" }[e] || "");
@@ -147,6 +144,7 @@ const Orquestra = (() => {
     A.abrirModal(h("h3", {}, ic(a.icone), a.nome), h("p", { class: "sub-m", texto: a.descricao }),
       h("dl", { class: "ficha" },
         h("dt", { texto: "Estado" }), h("dd", { texto: `${ESTADO_AG[a.estado] || a.estado} · ${a.detalhe || ""}` }),
+        h("dt", { texto: "Hoje" }), h("dd", { texto: `${usd((a.hoje || {}).custo || 0)} · ${((a.hoje || {}).entrada || 0) + ((a.hoje || {}).saida || 0)} tokens · acertou ${a.historico.sucessos} de ${a.historico.execucoes}` }),
         h("dt", { texto: "Versão" }), h("dd", { texto: a.versao ? `${a.versao}${a.compativel ? "" : " (precisa de " + a.versao_minima + "+)"}` : "-" }),
         h("dt", { texto: "Custo" }), h("dd", { texto: `${CUSTO[a.custo_modo] || a.custo_modo}${a.metodo ? " · login: " + a.metodo : ""}` }),
         h("dt", { texto: "Pode" }), h("dd", { texto: [a.pode_ler_projeto ? "ler o projeto" : "só texto", a.pode_editar ? "editar arquivos" : null,
@@ -158,7 +156,9 @@ const Orquestra = (() => {
         a.docs ? [h("dt", { texto: "Documentação" }), h("dd", {}, h("a", { href: a.docs, target: "_blank", rel: "noopener noreferrer" }, a.docs))] : null),
       h("h3", { class: "no-tit" }, ic("activity"), "Capacidades declaradas"), h("div", {}, barras),
       h("p", { class: "c-dica", texto: "O roteador soma: capacidade declarada + semelhança com o pedido + histórico real + custo + latência." }),
-      h("div", { class: "acoes-m" }, A.botao("Fechar", "x", A.fecharModal)));
+      h("div", { class: "acoes-m" },
+        A.botao("Verificar de novo", "refresh-cw", async () => { try { await A.pedir("orq_agente_verificar", { id: a.id }); A.fecharModal(); A.recarregar(); } catch (e) { A.erro(e); } }),
+        A.botao("Fechar", "x", A.fecharModal)));
   }
   function modalChave(a) {
     const campo = h("input", { class: "c-campo", type: "password", autocomplete: "off", placeholder: "cole a chave aqui" });

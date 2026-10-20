@@ -83,7 +83,8 @@ class Cerebro:
 def seletor(cfg=None, fabricas=None, indisponiveis=None):
     indisponiveis = indisponiveis or {}
     s = Seletor(cfg or CFG, None, None, fabricas=fabricas if fabricas is not None else {
-        "claude-cli": lambda: Cerebro("claude · sonnet"), "claude-api": lambda: Cerebro("claude-opus-5-5")},
+        "claude-cli": lambda: Cerebro("claude · sonnet"), "claude-api": lambda: Cerebro("claude-opus-5-5"),
+        "codex-cli": lambda: Cerebro("ChatGPT"), "gemini-cli": lambda: Cerebro("Gemini")},
         disponibilidade=lambda id_: indisponiveis.get(id_))
     s.local.aquecer = lambda: None                      # sem Ollama nos testes
     s.local.rotulo = "qwen3:8b"
@@ -119,11 +120,29 @@ def test_preferencia_corrompida_e_ignorada():
 def test_opcoes_para_a_hud():
     s = seletor(indisponiveis={"claude-api": "falta a chave em data/anthropic.key"})
     o = {x["id"]: x for x in s.opcoes()}
-    assert list(o) == ["qwen", "claude-cli", "claude-api"]
+    assert list(o) == ["qwen", "claude-cli", "claude-api", "codex-cli", "gemini-cli"]
     assert o["qwen"]["ativo"] and o["qwen"]["disponivel"]
     assert o["claude-cli"]["disponivel"] and not o["claude-cli"]["ativo"] and "sonnet" in o["claude-cli"]["descricao"]
     assert not o["claude-api"]["disponivel"] and "chave" in o["claude-api"]["motivo"]
     assert s.estado()["atual"] == "qwen" and s.estado()["rotulo"] == "qwen3:8b"
+
+
+def test_chatgpt_e_gemini_no_seletor():
+    s = seletor()
+    assert s.resolver("chatgpt") == "codex-cli" and s.resolver("gemini") == "gemini-cli"
+    r = s.trocar("codex-cli")
+    assert r["ok"] and s.atual == "codex-cli" and s.rotulo == "ChatGPT"
+    assert seletor(indisponiveis={"gemini-cli": "o Gemini não está instalado"}).resolver("gemini") is None
+
+
+def test_sem_login_avisa_para_entrar_sem_trocar():
+    from jarvis.brain.seletor import MOTIVO_LOGIN
+    s = seletor(indisponiveis={"codex-cli": MOTIVO_LOGIN})
+    o = {x["id"]: x for x in s.opcoes()}
+    assert o["codex-cli"]["precisa_login"] and not o["codex-cli"]["disponivel"]
+    r = s.trocar("codex-cli")
+    assert not r["ok"] and r["precisa_login"] and s.atual == "qwen"
+    assert s.resolver("chatgpt") == "codex-cli"          # por voz também: o controle abre o login
 
 
 def test_resolver_claude_prefere_assinatura_depois_api():
@@ -304,7 +323,7 @@ def test_hello_leva_o_estado_do_seletor():
     s = seletor()
     c = controle(s)
     h = c.hello()
-    assert h["cerebro"]["atual"] == "qwen" and h["modelo"] == "qwen3:8b" and len(h["cerebro"]["opcoes"]) == 3
+    assert h["cerebro"]["atual"] == "qwen" and h["modelo"] == "qwen3:8b" and len(h["cerebro"]["opcoes"]) == 5
 
 
 def test_controle_sem_seletor_nao_quebra():
@@ -414,3 +433,23 @@ def test_controle_troca_modelo_por_voz_e_avisa():
     c.texto_do_hud("usa o opus")
     assert s.rotulo == "claude · opus" and voz.ditas == ["Agora estou pensando com o Opus, senhor."]
     assert cer[0]["trocando"] == "modelo:opus" and cer[-1]["modelo_claude"] == "opus" and cer[-1]["trocando"] is None
+
+
+def test_escolher_sem_login_abre_o_login_e_troca_quando_termina(monkeypatch):
+    from jarvis.brain import logins
+    from jarvis.brain.seletor import MOTIVO_LOGIN
+    estado = {"logado": False}
+    s = seletor()
+    s._disponibilidade = lambda id_: (None if estado["logado"] else MOTIVO_LOGIN) if id_ == "codex-cli" else None
+    abertos = []
+
+    def falso_login(cli, ao_terminar, configurado=None, limite_s=0):
+        abertos.append(cli)
+        estado["logado"] = True              # você entrou no navegador
+        ao_terminar(True, "conta do ChatGPT")
+        return "Abri o login."
+    monkeypatch.setattr(logins, "login_automatico", falso_login)
+    c, sis = controle(s, Voz()), eventos("sistema")
+    c.trocar_cerebro("codex-cli")
+    assert abertos == ["codex"] and s.atual == "codex-cli"
+    assert any("Login do ChatGPT feito" in e["texto"] for e in sis)

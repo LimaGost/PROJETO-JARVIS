@@ -102,6 +102,9 @@ def iniciar_connect(cfg, ctl):
         rede.ligar_banco(banco)
         mo = motor.Motor(banco, servicos.todos(cfg), cfg, emitir=lambda **k: bus.emitir("connect"))
         mo.iniciar()
+        if not mo.automacoes_ligadas:
+            from jarvis.connect import ferramentas as ferramentas_connect
+            ferramentas_connect.desligar_automacoes()
         ctl.central = Central(mo, cofre())
         if c.get("webhooks", True):
             porta = webhooks.iniciar(mo, cofre(), banco, porta=int(c.get("porta_webhooks", webhooks.PORTA)))
@@ -181,16 +184,19 @@ def conversar(cfg, ctl, ocupado: threading.Event) -> bool:
     mic, ouvido, voz = ctl.mic, ctl.ouvido, ctl.voz
     ctl._origem.valor = "voz"
     bus.emitir("estado", estado="aguardando")
-    print("\n[aguardando 'Hey Jarvis']")
-    if not mic.esperar_wakeword():
+    print("\n[aguardando o chamado: 'Hey Jarvis', 'Ei Jarvis', 'Jarvis, está aí?'...]")
+    por_frase = cfg.get("wakeword", {}).get("por_frase", True)
+    acordou, pedido = mic.esperar_chamado(ouvido if por_frase else None)
+    if not acordou:
         return False
     ocupado.set()  # a reflexão em segundo plano espera a conversa acabar
     bus.emitir("estado", estado="ouvindo")
-    voz.falar(random.choice(CHAMADOS).format(t=cfg["tratamento"]))
-    voz.esperar()
+    if not pedido:                 # "Jarvis, que horas são?" já vem com o pedido: responde direto, sem "Pois não?"
+        voz.falar(random.choice(CHAMADOS).format(t=cfg["tratamento"]))
+        voz.esperar()
 
     espera = cfg["vad"]["espera_inicio_s"]
-    por_cima: str | None = None   # o que você disse interrompendo a resposta anterior
+    por_cima: str | None = pedido or None   # o pedido que veio no chamado, ou o que você disse interrompendo
     while not ctl.encerrar.is_set():  # janela de conversa: continua sem precisar do wake word
         if por_cima:
             texto, t1 = por_cima, time.time()

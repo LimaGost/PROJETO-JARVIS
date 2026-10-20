@@ -28,51 +28,58 @@ const S = {
 };
 const token = document.querySelector('meta[name="jarvis-token"]').content;
 
-/* ============================================================ mentalidade (Qwen / Claude) */
-function renderCerebros() {
-  const c = S.cerebro, caixa = $("cerebros");
-  caixa.hidden = !(c && c.opcoes && c.opcoes.length > 1);
-  if (caixa.hidden) return;
-  caixa.replaceChildren();
-  for (const o of c.opcoes) {
-    const b = el("button", "btn cerebro", o.nome);
-    b.type = "button";
-    b.setAttribute("aria-pressed", String(!!o.ativo));
-    b.title = o.disponivel ? o.descricao : `Indisponível: ${o.motivo}`;
-    b.disabled = !o.disponivel || !S.conectado || !!c.trocando;
-    if (c.trocando === o.id) b.classList.add("trocando");
-    if (!o.ativo) b.addEventListener("click", () => {
-      S.cerebro = { ...c, trocando: o.id }; renderCerebros();
-      enviar({ tipo: "trocar_cerebro", id: o.id });
-    });
-    caixa.appendChild(b);
-  }
-  renderModelosClaude(c, caixa);
-}
-
+/* ============================================================ mentalidade: um seletor com todos os cérebros */
 const MODELOS_CLAUDE = {
   opus: ["Opus", "O mais capaz: pensa melhor, gasta ~5x mais cota"],
   sonnet: ["Sonnet", "Equilíbrio entre inteligência, velocidade e cota"],
   haiku: ["Haiku", "O mais rápido e econômico"],
 };
-function renderModelosClaude(c, caixa) {
-  if (!(c.modelos_claude && c.modelos_claude.length > 1 && String(c.atual).startsWith("claude"))) return;
-  caixa.appendChild(el("span", "divisor", "·"));
-  for (const m of c.modelos_claude) {
-    const [nome, dica] = MODELOS_CLAUDE[m] || [m, ""];
-    const b = el("button", "btn modelo", nome);
-    b.type = "button";
-    b.title = dica;
-    const ativo = m === c.modelo_claude;
-    b.setAttribute("aria-pressed", String(ativo));
-    b.disabled = !S.conectado || !!c.trocando;
-    if (c.trocando === "modelo:" + m) b.classList.add("trocando");
-    if (!ativo) b.addEventListener("click", () => {
-      S.cerebro = { ...c, trocando: "modelo:" + m }; renderCerebros();
-      enviar({ tipo: "trocar_modelo_claude", modelo: m });
-    });
-    caixa.appendChild(b);
+function rotuloOpcao(o, c) {
+  if (c.trocando === o.id) return `${o.nome} · trocando…`;
+  if (o.entrando) return `${o.nome} · esperando o login…`;
+  if (o.disponivel) return o.nome;
+  if (o.precisa_login) return `${o.nome} · entrar`;
+  const m = String(o.motivo || "");
+  return `${o.nome} · ${/instalad/.test(m) ? "não instalado" : /chave/.test(m) ? "sem chave" : "indisponível"}`;
+}
+function renderCerebros() {
+  const c = S.cerebro, caixa = $("cerebros");
+  caixa.hidden = !(c && c.opcoes && c.opcoes.length > 1);
+  if (caixa.hidden) return;
+  const sel = el("select", "seletor-cerebro");
+  sel.setAttribute("aria-label", "Cérebro do Jarvis");
+  sel.title = "Com quem o Jarvis pensa. Sem login? Escolha que eu abro o login sozinho.";
+  sel.disabled = !S.conectado || !!c.trocando;
+  for (const o of c.opcoes) {
+    const op = el("option", "", rotuloOpcao(o, c));
+    op.value = o.id;
+    op.selected = !!o.ativo;
+    op.disabled = !o.disponivel && !o.precisa_login;      // não instalado: não dá para escolher
+    op.title = o.disponivel ? o.descricao : o.motivo || "";
+    sel.appendChild(op);
   }
+  sel.addEventListener("change", () => {
+    S.cerebro = { ...c, trocando: sel.value }; renderCerebros();
+    enviar({ tipo: "trocar_cerebro", id: sel.value });
+  });
+  const partes = [el("span", "rot-cerebro", "Cérebro"), sel];
+  if (c.modelos_claude && c.modelos_claude.length > 1 && String(c.atual).startsWith("claude")) {
+    const mod = el("select", "seletor-cerebro modelo");
+    mod.setAttribute("aria-label", "Modelo do Claude");
+    mod.disabled = !S.conectado || !!c.trocando;
+    for (const m of c.modelos_claude) {
+      const [nome, dica] = MODELOS_CLAUDE[m] || [m, ""];
+      const op = el("option", "", c.trocando === "modelo:" + m ? `${nome} · trocando…` : nome);
+      op.value = m; op.title = dica; op.selected = m === c.modelo_claude;
+      mod.appendChild(op);
+    }
+    mod.addEventListener("change", () => {
+      S.cerebro = { ...c, trocando: "modelo:" + mod.value }; renderCerebros();
+      enviar({ tipo: "trocar_modelo_claude", modelo: mod.value });
+    });
+    partes.push(mod);
+  }
+  caixa.replaceChildren(...partes);
 }
 
 /* ============================================================ estado visível */

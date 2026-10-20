@@ -281,8 +281,19 @@ def whatsapp_conversas(contato: str = "", quantas: int = 20) -> str:
     return conteudo_externo(f"conversa com {nome}", "\n".join(linhas) or "sem mensagens de texto")
 
 
-@ferramenta("abrir_central", "Abre a Central do Jarvis (integrações, tarefas, automações e painel) na HUD.",
-            {"secao": {"type": "string", "enum": ["painel", "integracoes", "tarefas", "automacoes"]}})
-def abrir_central(secao: str = "painel") -> str:
-    bus.emitir("central_abrir", secao=secao or "painel")
+@ferramenta("abrir_central", "Abre a Central do Jarvis na HUD (agentes de IA, orquestração, terminal e integrações).",
+            {"secao": {"type": "string", "enum": ["agentes", "orquestracao", "terminal", "integracoes"]}})
+def abrir_central(secao: str = "agentes") -> str:
+    bus.emitir("central_abrir", secao=secao or "agentes")
     return "Central aberta na HUD."
+
+
+FERRAMENTAS_DE_AUTOMACAO = ("criar_automacao", "listar_automacoes", "ligar_automacao", "testar_automacao",
+                            "rodar_automacao", "apagar_automacao")
+
+
+def desligar_automacoes():
+    """connect.automacoes: false: o cérebro deixa de ver as ferramentas de automação."""
+    from jarvis.tools.base import REGISTRO
+    for nome in FERRAMENTAS_DE_AUTOMACAO:
+        REGISTRO.pop(nome, None)

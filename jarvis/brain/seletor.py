@@ -1,4 +1,7 @@
-"""Seletor de mentalidade: escolher em tempo real entre o Qwen local e o Claude (assinatura ou API).
+"""Seletor de mentalidade: escolher em tempo real o cérebro do Jarvis: Qwen local, Claude (assinatura/CLI ou API),
+ChatGPT (Codex CLI, conta do ChatGPT) e Gemini (Gemini CLI, conta Google).
+
+Cérebro de CLI sem login: escolher abre o login oficial sozinho (jarvis/brain/logins.py) e troca quando terminar.
 
 Tem a mesma interface de um cérebro (responder, cancelar, esquecer, aquecer, rotulo), então o resto do JARVIS não
 sabe qual está em uso. Cada cérebro é criado só quando é escolhido pela primeira vez (o `claude` só sobe se você
@@ -11,17 +14,20 @@ novo `--model` (ou recria o cliente da API). O novo é testado antes de largar o
 do banco: para o usuário, o Jarvis continua o mesmo, só pensando com outro modelo.
 """
 import json
-import shutil
 import threading
 from typing import Callable, Iterator
 
 from jarvis.config import RAIZ
 
 ARQUIVO_PREFERENCIAS = RAIZ / "data" / "preferencias.json"
-MOTOR_PARA_ID = {"ollama": "qwen", "claude-cli": "claude-cli", "claude": "claude-api"}
+MOTOR_PARA_ID = {"ollama": "qwen", "claude-cli": "claude-cli", "claude": "claude-api", "codex-cli": "codex-cli",
+                 "gemini-cli": "gemini-cli"}
+CLI_DO_CEREBRO = {"claude-cli": "claude", "codex-cli": "codex", "gemini-cli": "gemini"}   # para o login automático
+ALVOS = {"chatgpt": "codex-cli", "codex": "codex-cli", "gpt": "codex-cli", "gemini": "gemini-cli"}
 MODELOS_CLAUDE = ("opus", "sonnet", "haiku")       # apelidos do `claude --model`
 MODELOS_API = {"opus": "claude-opus-5-5", "sonnet": "claude-sonnet-5-5", "haiku": "claude-haiku-5-5"}
 IDS_CLAUDE = ("claude-cli", "claude-api")
+MOTIVO_LOGIN = "sem login: escolha para entrar (abro o login sozinho)"
 
 
 def _preferencias() -> dict:
@@ -60,7 +66,8 @@ class Seletor:
         self.local = Cerebro(cfg, executor, memoria)               # sempre existe: é o Qwen e a reserva dos outros
         self._objetos: dict[str, object] = {"qwen": self.local}
         self._lock = threading.RLock()
-        self._fabricas = fabricas or {"claude-cli": self._criar_cli, "claude-api": self._criar_api}
+        self._fabricas = fabricas or {"claude-cli": self._criar_cli, "claude-api": self._criar_api,
+                                      "codex-cli": self._criar_codex, "gemini-cli": self._criar_gemini}
         self._disponibilidade = disponibilidade or self._motivo_indisponivel
         self.atual = self._escolha_inicial()
 
@@ -72,15 +79,26 @@ class Seletor:
             "qwen": {"nome": "Qwen local", "descricao": f"{self.cfg['llm']['modelo']} no seu PC: privado, sem custo, mais fraco"},
             "claude-cli": {"nome": "Claude · assinatura", "descricao": f"Claude {cli} pelo seu login: muito mais capaz, gasta a sua cota"},
             "claude-api": {"nome": "Claude · API", "descricao": f"{api} por chave de API: muito mais capaz, cobrança por uso"},
+            "codex-cli": {"nome": "ChatGPT · CLI", "descricao": "ChatGPT pelo Codex CLI, com o login da sua conta do ChatGPT"},
+            "gemini-cli": {"nome": "Gemini · CLI", "descricao": "Gemini pelo Gemini CLI, com a sua conta Google"},
         }
 
     def _motivo_indisponivel(self, id_: str) -> str | None:
         """None se dá para usar; senão o motivo, em português, para a HUD mostrar."""
         if id_ == "qwen":
             return None
-        if id_ == "claude-cli":
-            c = self.cfg.get("claude_cli", {})
-            return None if (c.get("executavel") or shutil.which("claude")) else "o programa 'claude' não foi encontrado"
+        if id_ in CLI_DO_CEREBRO:
+            from jarvis.brain import logins
+            cli = CLI_DO_CEREBRO[id_]
+            configurado = self.cfg.get({"claude-cli": "claude_cli", "codex-cli": "codex_cli",
+                                        "gemini-cli": "gemini_cli"}[id_], {}) or {}
+            exe = configurado.get("executavel") or configurado.get("comando")
+            if not (exe or logins.instalado(cli)):
+                return f"o {logins.CLIS[cli]['nome']} não está instalado"
+            estado, _ = logins.verificar(cli, exe if isinstance(exe, list) else None)
+            if estado is False:
+                return MOTIVO_LOGIN
+            return None
         if id_ == "claude-api":
             from jarvis.brain.claude import carregar_chave
             return None if carregar_chave() else "falta a chave em data/anthropic.key"
@@ -90,12 +108,14 @@ class Seletor:
         return list(self._meta())
 
     def opcoes(self) -> list[dict]:
+        from jarvis.brain import logins
         meta = self._meta()
         saida = []
         for id_, m in meta.items():
             motivo = self._disponibilidade(id_)
             saida.append({"id": id_, "nome": m["nome"], "descricao": m["descricao"], "disponivel": motivo is None,
-                          "motivo": motivo, "ativo": id_ == self.atual})
+                          "motivo": motivo, "ativo": id_ == self.atual, "precisa_login": motivo == MOTIVO_LOGIN,
+                          "entrando": id_ in CLI_DO_CEREBRO and logins.esperando(CLI_DO_CEREBRO[id_])})
         return saida
 
     def estado(self) -> dict:
@@ -159,6 +179,8 @@ class Seletor:
         """'qwen' -> 'qwen'; 'claude' -> a melhor opção Claude disponível (assinatura antes da API)."""
         if alvo == "qwen":
             return "qwen"
+        if alvo in ALVOS:
+            return ALVOS[alvo] if self._disponibilidade(ALVOS[alvo]) in (None, MOTIVO_LOGIN) else None
         for id_ in ("claude-cli", "claude-api"):
             if self._disponibilidade(id_) is None:
                 return id_
@@ -176,6 +198,18 @@ class Seletor:
         from jarvis.brain.claude import CerebroComReserva
         from jarvis.brain.claude_cli import CerebroClaudeCLI
         principal = CerebroClaudeCLI(self.cfg, self.executor, self.memoria)
+        return CerebroComReserva(principal, self.local) if self.cfg.get("cerebro", {}).get("reserva_local", True) else principal
+
+    def _criar_codex(self):
+        from jarvis.brain.claude import CerebroComReserva
+        from jarvis.brain.outros_cli import CerebroCodexCLI
+        principal = CerebroCodexCLI(self.cfg, self.executor, self.memoria)
+        return CerebroComReserva(principal, self.local) if self.cfg.get("cerebro", {}).get("reserva_local", True) else principal
+
+    def _criar_gemini(self):
+        from jarvis.brain.claude import CerebroComReserva
+        from jarvis.brain.outros_cli import CerebroGeminiCLI
+        principal = CerebroGeminiCLI(self.cfg, self.executor, self.memoria)
         return CerebroComReserva(principal, self.local) if self.cfg.get("cerebro", {}).get("reserva_local", True) else principal
 
     def _criar_api(self):
@@ -245,7 +279,7 @@ class Seletor:
                 return {"ok": False, "atual": self.atual, "erro": "opção desconhecida"}
             motivo = self._disponibilidade(id_)
             if motivo:
-                return {"ok": False, "atual": self.atual, "erro": motivo}
+                return {"ok": False, "atual": self.atual, "erro": motivo, "precisa_login": motivo == MOTIVO_LOGIN}
             if id_ == self.atual:
                 return {"ok": True, "atual": self.atual, "erro": None}
             anterior = self.atual

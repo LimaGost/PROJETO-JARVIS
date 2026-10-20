@@ -5,8 +5,9 @@ Como funciona:
 O `claude` só decide o que pedir. Quem executa, classifica 🟢🟡🔴, pede confirmação e registra é o Executor do JARVIS,
 chamado pela ponte. Por isso as ferramentas do próprio `claude` (Bash, Edit...) têm de estar DESLIGADAS.
 
-Isolamento (fail-closed): o processo sobe com --restricted --strict-mcp-config --tools "" --disable-slash-commands e
-o evento `init` é conferido: se aparecer qualquer ferramenta que não seja `mcp__jarvis__*`, um servidor MCP seu
+Isolamento (fail-closed): o processo sobe com --restricted --strict-mcp-config --tools "WebSearch,WebFetch"
+--disable-slash-commands e o evento `init` é conferido: se aparecer qualquer ferramenta que não seja `mcp__jarvis__*`
+ou a busca/leitura de páginas nativa (claude_cli.web_nativa, só leitura), um servidor MCP seu
 (Gmail, Supabase...), skill ou plugin externo, o JARVIS RECUSA usar este cérebro e cai no modelo local.
 
 Aviso: usar a assinatura assim é uma zona cinza da política da Anthropic (veja o README). Uso pessoal, programa
@@ -33,19 +34,24 @@ from jarvis.brain.llm import _FIM_FRASE, _LIMPAR, _TRAVESSAO, PROMPT_SISTEMA, PR
 from jarvis.config import RAIZ
 
 PREFIXO = "mcp__jarvis__"
+WEB_NATIVA = ("WebSearch", "WebFetch")   # busca e leitura de páginas da própria Anthropic: só leitura, sem tocar no PC
 ANEXO_SISTEMA = (
     "\n\nComo você roda: suas ferramentas aparecem com o prefixo mcp__jarvis__ (ex.: mcp__jarvis__hora_data); chame-as "
     "por esse nome completo. Você não tem acesso a nenhuma outra ferramenta nem ao terminal por outro caminho. "
     "Se uma ação for perigosa, a própria ferramenta pede a confirmação do usuário; não pergunte antes."
 )
+ANEXO_WEB = (" Para a internet você também tem WebSearch e WebFetch (busca e leitura de páginas): use-os à vontade "
+             "para pesquisar em vários sites, em paralelo quando puder; pesquisar_a_fundo do Jarvis também lê várias "
+             "páginas de uma vez.")
 VARIAVEIS_REMOVIDAS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")  # a ideia aqui é usar a assinatura, não uma chave
 
 
 # ---------------------------------------------------------------- isolamento
-def validar_init(ev: dict) -> str | None:
-    """None se o `claude` está confinado às ferramentas do JARVIS; senão, o motivo (e o JARVIS recusa rodar)."""
+def validar_init(ev: dict, permitidas: tuple = ()) -> str | None:
+    """None se o `claude` está confinado às ferramentas do JARVIS (+ `permitidas`, ex.: a busca na web nativa);
+    senão, o motivo (e o JARVIS recusa rodar)."""
     ferramentas = ev.get("tools") or []
-    fora = [t for t in ferramentas if not str(t).startswith(PREFIXO)]
+    fora = [t for t in ferramentas if not str(t).startswith(PREFIXO) and t not in permitidas]
     if fora:
         return f"ferramentas fora do JARVIS ligadas: {fora[:5]}"
     servidores = [s.get("name") if isinstance(s, dict) else str(s) for s in (ev.get("mcp_servers") or [])]
@@ -169,6 +175,7 @@ class CerebroClaudeCLI(Cerebro):
         self.esforco = c.get("esforco", "low")
         self.timeout_s = c.get("timeout_s", 120)
         self.max_turnos_cli = c.get("max_turnos_por_pedido", 12)
+        self.web_nativa = WEB_NATIVA if c.get("web_nativa", True) else ()
         self.exe = executavel or c.get("executavel") or shutil.which("claude")
         if not self.exe:
             raise RuntimeError("não achei o programa 'claude' (instale o Claude Code e faça login)")
@@ -177,7 +184,8 @@ class CerebroClaudeCLI(Cerebro):
         self.rotulo = f"claude · {self.modelo_cli}"
         self.pasta = RAIZ / "data" / "claude_cli"
         (self.pasta / "cwd").mkdir(parents=True, exist_ok=True)   # pasta vazia: nenhum CLAUDE.md de projeto
-        (self.pasta / "sistema.txt").write_text(self.sistema + PROMPT_VISAO + ANEXO_SISTEMA, encoding="utf-8")
+        (self.pasta / "sistema.txt").write_text(self.sistema + PROMPT_VISAO + ANEXO_SISTEMA
+                                                + (ANEXO_WEB if self.web_nativa else ""), encoding="utf-8")
         self.ponte = PonteHTTP(executor)
         self.limite_continuidade = 5000
         self._sessao_nova = True       # processo recém-aberto: o 1º pedido leva a conversa recente do banco
@@ -199,9 +207,9 @@ class CerebroClaudeCLI(Cerebro):
             "env": {"JARVIS_PONTE_URL": self.ponte.url, "JARVIS_PONTE_TOKEN": self.ponte.token, "PYTHONUTF8": "1"}}}}
         cmd = [self.exe, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
                "--include-partial-messages",
-               "--restricted", "--strict-mcp-config", "--mcp-config", json.dumps(mcp), "--tools", "",
+               "--restricted", "--strict-mcp-config", "--mcp-config", json.dumps(mcp), "--tools", ",".join(self.web_nativa),
                "--disable-slash-commands", "--no-session-persistence",
-               "--permission-mode", "dontAsk", "--allowedTools", "mcp__jarvis",
+               "--permission-mode", "dontAsk", "--allowedTools", ",".join(("mcp__jarvis", *self.web_nativa)),
                "--system-prompt-file", str(self.pasta / "sistema.txt"),
                "--model", self.modelo_cli, "--max-turns", str(self.max_turnos_cli)]
         if self.esforco:
@@ -275,7 +283,7 @@ class CerebroClaudeCLI(Cerebro):
                 return None
             if ev.get("type") == "system" and ev.get("subtype") == "init":
                 self.init = ev
-                motivo = validar_init(ev)
+                motivo = validar_init(ev, self.web_nativa)
                 if motivo:
                     self.encerrar()
                     raise ErroCerebro(f"isolamento do claude falhou ({motivo}); recusando usá-lo")

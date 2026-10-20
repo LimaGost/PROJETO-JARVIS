@@ -5,6 +5,8 @@ cerebro:
   # ollama     100% local, mais fraco
   # claude     API da Anthropic (chave própria, cobrança por uso)
   # claude-cli programa `claude` com a SUA ASSINATURA (sem chave). Zona cinza da política da Anthropic, veja o README
+  # codex-cli  ChatGPT pelo Codex CLI (login da conta do ChatGPT) · gemini-cli  Gemini CLI (conta Google)
+  # Troque a qualquer hora no seletor "Cérebro" da HUD ou por voz ("usa o ChatGPT", "muda pro Gemini")
   # Em qualquer motor Claude, o texto das conversas e do que as ferramentas leem vai para a Anthropic.
   motor: claude-cli
   reserva_local: true     # com motor Claude: se a internet, o login ou a cota falharem, o modelo local responde
@@ -16,6 +18,15 @@ claude_cli:
   esforco: low            # low | medium | high: quanto ele "pensa". low = voz rápida
   timeout_s: 120          # sem nenhum evento por este tempo, o processo é reiniciado
   max_turnos_por_pedido: 30   # com o mouse, uma tarefa leva vários passos de ver e agir
+  web_nativa: true        # o Claude também usa a busca e a leitura de páginas dele (WebSearch/WebFetch): pesquisa rápida
+
+codex_cli:                # cérebro "ChatGPT · CLI": o Codex com o login da sua conta do ChatGPT (codex login)
+  modelo: ""              # vazio = o padrão do Codex
+  timeout_s: 180
+
+gemini_cli:               # cérebro "Gemini · CLI": o Gemini CLI com a sua conta Google
+  modelo: ""
+  timeout_s: 180
 
 claude:
   # a CHAVE nunca vai aqui (este arquivo vai para o git): variável ANTHROPIC_API_KEY ou o arquivo data/anthropic.key
@@ -45,6 +56,7 @@ hud:
 
 connect:                  # JARVIS Connect: Central na HUD, tarefas, automações e integrações (jarvis/connect, docs/CONNECT.md)
   ativo: true
+  automacoes: false       # desligadas (pedido do Iury, 2026-10-20): nada roda sozinho; os lembretes de tarefa continuam
   webhooks: true          # servidor SÓ de webhooks em 127.0.0.1 (o túnel da Cloudflare aponta só para ele; a HUD fica fechada)
   porta_webhooks: 8766
   meu_whatsapp: ""        # seu número com DDD (ex.: 11987654321): o "eu" das automações ("me manda no WhatsApp")
@@ -99,6 +111,8 @@ audio:
 wakeword:
   modelo: data/wakeword/hey_jarvis_v0.1.onnx
   limiar: 0.5
+  por_frase: true         # também acorda com "Ei Jarvis", "Jarvis, está aí?", "Oi Jarvis", "Jarvis, que horas são?"
+                          # (frases curtas são transcritas pelo Whisper; false = só o "Hey Jarvis")
 
 vad:
   agressividade: 3        # 0 a 3 (3 = mais rígido com ruído; no seu microfone, 2 confundia ruído com voz)

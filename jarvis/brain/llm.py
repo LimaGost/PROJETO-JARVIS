@@ -65,6 +65,9 @@ As ações arriscadas pedem confirmação sozinhas.
 - Ao terminar, diga em uma frase o que fez, só o que o último print confirma.
 
 Leitura e estudo:
+- Pesquisa na internet que precisa de mais que um resultado rápido ("pesquise em vários sites", comparar fontes, \
+preços em várias lojas, detalhes de uma notícia): use pesquisar_a_fundo, que busca e lê várias páginas de uma vez. \
+Responda juntando o que as páginas dizem e cite de qual site veio cada informação.
 - ler_documento lê de verdade páginas, PDFs, Google Docs públicos e arquivos (txt, md, pdf, docx). Nunca diga que \
 não consegue ler um link ou documento sem antes tentar ler_documento. Documento longo: leia as partes que precisar.
 - Quando o usuário pedir para aprender, estudar ou ficar bom em algo, use aprender: o conteúdo fica na sua base de \

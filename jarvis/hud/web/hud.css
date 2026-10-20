@@ -290,7 +290,14 @@ footer::before { content: ""; position: absolute; left: 0; right: 0; top: 0; hei
 #entrada:focus { outline: none; border-color: var(--ciano); box-shadow: inset 0 0 18px rgba(var(--c-22d8ff), .18), 0 0 0 3px rgba(var(--c-22d8ff), .14); }
 #entrada:disabled { opacity: .5; }
 .botoes { display: flex; gap: 8px; }
-.cerebros { display: flex; gap: 4px; flex-wrap: wrap; }
+.cerebros { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.cerebros .rot-cerebro { font: 600 10px var(--tit); letter-spacing: .18em; text-transform: uppercase; color: var(--suave); }
+.seletor-cerebro { background: rgba(var(--c-000a14), .7); color: var(--texto); border: 1px solid var(--borda); padding: 6px 28px 6px 10px;
+  font: 600 12px var(--sans); cursor: pointer; max-width: 260px; }
+.seletor-cerebro:focus { outline: none; border-color: var(--ciano); box-shadow: 0 0 10px rgba(var(--c-22d8ff), .35); }
+.seletor-cerebro:disabled { opacity: .6; cursor: progress; }
+.seletor-cerebro option { background: #04121d; color: var(--texto); }
+.seletor-cerebro option:disabled { color: var(--suave); }
 .cerebros .btn { padding-left: 10px; padding-right: 10px; white-space: nowrap; }
 .cerebros .btn[aria-pressed="true"] { cursor: default; }
 .cerebros .divisor { align-self: center; color: var(--suave); padding: 0 2px; }
@@ -342,6 +349,7 @@ footer::before { content: ""; position: absolute; left: 0; right: 0; top: 0; hei
   .cronos, .marca .sub, .sinal { display: none; }
   footer { flex-direction: column; align-items: stretch; }
   .botoes .btn, .cerebros .btn { flex: 1; }
+  .seletor-cerebro { flex: 1; max-width: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

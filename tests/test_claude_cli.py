@@ -349,9 +349,9 @@ def test_comando_de_producao_tem_todas_as_travas(tmp_path):
         cmd = c._comando()
         for obrigatoria in ("--restricted", "--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence"):
             assert obrigatoria in cmd
-        assert cmd[cmd.index("--tools") + 1] == ""                                  # nenhuma ferramenta nativa
+        assert cmd[cmd.index("--tools") + 1] == "WebSearch,WebFetch"               # nativas: só busca/leitura web
         assert cmd[cmd.index("--permission-mode") + 1] == "dontAsk"
-        assert cmd[cmd.index("--allowedTools") + 1] == "mcp__jarvis"
+        assert cmd[cmd.index("--allowedTools") + 1] == "mcp__jarvis,WebSearch,WebFetch"
         assert cmd[cmd.index("--model") + 1] == "sonnet" and cmd[cmd.index("--effort") + 1] == "low"
         for proibida in ("--dangerously-skip-permissions", "--allow-dangerously-skip-permissions", "--bare",
                          "bypassPermissions", "--add-dir", "--chrome", "--ide", "--plugin-dir", "--plugin-url"):
@@ -365,6 +365,23 @@ def test_comando_de_producao_tem_todas_as_travas(tmp_path):
         assert Path(c.pasta / "cwd").is_dir() and not any((c.pasta / "cwd").iterdir())   # pasta de trabalho vazia
     finally:
         c.ponte.parar()
+
+
+def test_sem_web_nativa_nenhuma_ferramenta_nativa(tmp_path):
+    c = CerebroClaudeCLI({**CFG, "claude_cli": {**CFG.get("claude_cli", {}), "web_nativa": False}}, executor(tmp_path), None,
+                         executavel="claude")
+    try:
+        cmd = c._comando()
+        assert cmd[cmd.index("--tools") + 1] == "" and cmd[cmd.index("--allowedTools") + 1] == "mcp__jarvis"
+    finally:
+        c.ponte.parar()
+
+
+def test_init_aceita_so_a_web_nativa_declarada():
+    assert validar_init({**INIT_OK, "tools": ["mcp__jarvis__hora_data", "WebSearch", "WebFetch"]},
+                        ("WebSearch", "WebFetch")) is None
+    assert validar_init({**INIT_OK, "tools": ["mcp__jarvis__hora_data", "WebSearch"]})            # sem permitir: recusa
+    assert validar_init({**INIT_OK, "tools": ["WebSearch", "Bash"]}, ("WebSearch", "WebFetch"))    # Bash nunca
 
 
 def test_assinatura_nao_chave_de_api_no_ambiente_do_processo(fabrica, monkeypatch):

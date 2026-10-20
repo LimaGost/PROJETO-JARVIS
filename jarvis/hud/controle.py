@@ -244,7 +244,8 @@ class Controle:
             self.voz.falar("Conversa reiniciada.")
 
     # ------------------------------------------------------------ mentalidade (Qwen / Claude)
-    NOMES_FALADOS = {"qwen": "Qwen local", "claude-cli": "Claude", "claude-api": "Claude por API"}
+    NOMES_FALADOS = {"qwen": "Qwen local", "claude-cli": "Claude", "claude-api": "Claude por API",
+                     "codex-cli": "ChatGPT", "gemini-cli": "Gemini"}
 
     def enviar_cerebro(self, trocando: str | None = None):
         if hasattr(self.cerebro, "estado"):
@@ -289,9 +290,10 @@ class Controle:
             return
         id_ = sel.resolver(alvo) if hasattr(sel, "resolver") else None
         if id_ is None:
-            bus.emitir("sistema", texto="O Claude não está disponível agora.")
+            nome = {"chatgpt": "ChatGPT", "gemini": "Gemini"}.get(alvo, "Claude")
+            bus.emitir("sistema", texto=f"O {nome} não está disponível agora (não está instalado neste PC).")
             if self.voz:
-                self.voz.falar("O Claude não está disponível agora, senhor.")
+                self.voz.falar(f"O {nome} não está disponível agora, {self.tratamento}.")
             return
         self.trocar_cerebro(id_)
 
@@ -318,10 +320,37 @@ class Controle:
             bus.emitir("sistema", texto=f"Mentalidade: {sel.rotulo}. A conversa continua de onde parou.")
             if self.voz:
                 self.voz.falar(f"Mentalidade {nome} ativada.")
+        elif resultado.get("precisa_login"):
+            self._login_e_trocar(id_, nome)
         else:
             bus.emitir("sistema", texto=f"Não consegui trocar para {nome}: {resultado['erro']}. Continuo com {sel.rotulo}.")
             if self.voz:
                 self.voz.falar(f"Não consegui trocar para {nome}, senhor. Continuo com a mentalidade atual.")
+
+    def _login_e_trocar(self, id_: str, nome: str):
+        """Cérebro de CLI sem login: abre o login oficial e, quando você terminar de entrar, troca sozinho."""
+        from jarvis.brain import logins
+        from jarvis.brain.seletor import CLI_DO_CEREBRO
+        cli = CLI_DO_CEREBRO.get(id_)
+        if cli is None:
+            return
+
+        def terminou(ok: bool, detalhe: str):
+            self.enviar_cerebro()
+            if ok:
+                bus.emitir("sistema", texto=f"Login do {nome} feito. Trocando…")
+                self.trocar_cerebro(id_)
+            else:
+                bus.emitir("sistema", texto=f"O login do {nome} não terminou ({detalhe}). Continuo com {self.cerebro.rotulo}.")
+        try:
+            frase = logins.login_automatico(cli, terminou)
+        except Exception as e:
+            bus.emitir("sistema", texto=f"Não consegui abrir o login do {nome}: {e}")
+            return
+        self.enviar_cerebro()
+        bus.emitir("sistema", texto=frase)
+        if self.voz:
+            self.voz.falar(f"O {nome} precisa de login, {self.tratamento}. Abri a janela; entre com a sua conta que eu troco sozinho.")
 
     def silenciar(self, valor: bool):
         if self.mic:
