@@ -17,3 +17,5 @@ data/preferencias.json
 .venv-voz/
 .venv-qwen3/
 data/orquestra/
+data/gemini_cli_cerebro/
+data/codex_cli_cerebro/
